@@ -41,6 +41,51 @@
       background-color: white;
       border-radius: 8px;
       box-shadow: 0 1px 2px 0 rgba(60, 64, 67, 0.3), 0 2px 6px 2px rgba(60, 64, 67, 0.15);
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      gap: 20px;
+    }
+
+    .main-content {
+      padding-right: 20px;
+      border-right: 1px solid var(--border-color);
+    }
+
+    .instructions {
+      padding: 20px;
+      background-color: var(--background-light);
+      border-radius: 8px;
+      position: sticky;
+      top: 20px;
+      max-height: calc(100vh - 40px);
+      overflow-y: auto;
+    }
+
+    .instruction-content {
+      display: none;
+      opacity: 0;
+      transition: opacity 0.3s ease-in-out;
+    }
+
+    .instruction-content.active {
+      display: block;
+      opacity: 1;
+    }
+
+    .instructions h2 {
+      margin-bottom: 15px;
+      font-size: 18px;
+      color: var(--text-primary);
+    }
+
+    .instructions ol {
+      padding-left: 20px;
+    }
+
+    .instructions li {
+      margin-bottom: 10px;
+      font-size: 14px;
+      color: var(--text-secondary);
     }
 
     .header {
@@ -575,29 +620,122 @@
       width: 1em;
       margin-left: -1em;
     }
+
+    .tab-content p {
+      font-size: 16px;
+      color: var(--text-primary);
+      margin-bottom: 10px;
+    }
+
+    .tab-content ul {
+      list-style-type: none;
+    }
+
+    .tab-content ul li {
+      position: relative;
+      padding-left: 20px;
+      margin-bottom: 8px;
+      line-height: 1.4;
+    }
+
+    .tab-content ul li::before {
+      content: "•";
+      color: var(--primary-color);
+      font-weight: bold;
+      position: absolute;
+      left: 0;
+    }
   </style>
 </head>
 
 
 <body>
   <div class="container">
-    <div class="header">
-      <h1>NFC位置工具</h1>
-    </div>
+    <div class="main-content">
+      <div class="header">
+        <h1>NFC位置标记工具</h1>
+      </div>
 
-    <div class="tab-container">
-      <div class="tab-buttons">
-        <button class="tab-button active" data-tab="mark">手动标记</button>
-        <button class="tab-button" data-tab="detect">批量检测</button>
+      <div class="tab-container">
+        <div class="tab-buttons">
+          <button class="tab-button active" data-tab="mark">手动标记</button>
+          <button class="tab-button" data-tab="detect">批量检测</button>
+        </div>
+      </div>
+
+      <!-- 标记功能的内容 -->
+      <div id="markTab" class="tab-content active">
+        <div class="upload-section">
+          <div class="input-group">
+            <label for="brand">手机品牌</label>
+            <input type="text" id="brand" placeholder="例如：APPLE">
+          </div>
+          <div class="input-group">
+            <label for="model">手机型号</label>
+            <input type="text" id="model" placeholder="例如：IPHONE15">
+          </div>
+        </div>
+
+        <div class="size-controls">
+          <label for="aspectRatio">手机屏幕比例调整</label>
+          <input type="range" id="aspectRatio" min="16" max="22" value="19.5" step="0.5">
+          <div class="size-display">当前比例：9:19.5</div>
+        </div>
+
+        <div class="phone-container" id="phoneContainer">
+          <div class="phone-screen"></div>
+          <div class="phone-notch"></div>
+          <div class="marking-area" id="markingArea"></div>
+          <div class="nfc-marker" id="nfcMarker"></div>
+        </div>
+
+        <div class="button-group">
+          <button id="generateBtn" disabled>生成JSON</button>
+          <button id="resetBtn">重置</button>
+          <button id="copyMarkBtn" disabled>复制结果</button>
+          <button id="submitPRBtn" disabled>提交PR</button>
+        </div>
+
+        <div id="markResult">暂无结果</div>
+      </div>
+
+      <!-- 检测功能的内容 -->
+      <div id="detectTab" class="tab-content">
+        <p>批量检测功能可以自动分析多个手机图片中的NFC位置：</p>
+        <ul style="margin: 10px 0 20px 20px; color: var(--text-secondary);">
+          <li>支持批量上传多个品牌和型号的手机图片</li>
+          <li>自动识别图片中已标记的NFC区域（红色框标记）</li>
+          <li>生成标准格式的JSON数据文件</li>
+        </ul>
+
+        <div class="upload-section">
+          <div class="file-input-wrapper">
+            <label class="custom-file-upload">
+              <input type="file" id="folderInput" webkitdirectory directory multiple>
+              选择文件夹
+            </label>
+          </div>
+          <div class="progress">
+            处理进度：<span id="progress">0/0</span>
+          </div>
+        </div>
+
+        <div class="button-group">
+          <button id="downloadBtn" style="display:none;">下载JSON结果</button>
+          <button id="copyBtn" style="display:none;">复制结果</button>
+        </div>
+
+        <div id="results">暂无结果</div>
+        <canvas id="imageCanvas"></canvas>
       </div>
     </div>
 
-    <!-- 标记功能的内容 -->
-    <div id="markTab" class="tab-content active">
-      <div class="instructions">
-        <h3>使用说明：</h3>
+    <div class="instructions">
+      <h2>使用说明</h2>
+      <!-- 手动标记的使用说明 -->
+      <div class="instruction-content active" id="markInstructions">
         <ol>
-          <li>输入手机品牌和型号（例如：APPLE IPHONE15，无需区分大小写）</li>
+          <li>输入手机品牌和型号（例如：APPLE IPHONE15）</li>
           <li>调整手机屏幕比例（默认9:19.5）</li>
           <li>在手机模型上按住鼠标左键并拖动来标记NFC区域（将显示为红色框）</li>
           <li>点击"生成JSON"按钮获取结果</li>
@@ -606,82 +744,28 @@
               <li>点击"提交PR"按钮</li>
               <li>在打开的GitHub页面中确认文件路径（data/品牌/型号.json）</li>
               <li>点击"Propose new file"提交审核</li>
-              <li>等待管理员审核通过</li>
             </ul>
           </li>
           <li>如需重新标记，点击"重置"按钮</li>
         </ol>
       </div>
-
-      <div class="upload-section">
-        <div class="input-group">
-          <label for="brand">手机品牌</label>
-          <input type="text" id="brand" placeholder="例如：APPLE">
-        </div>
-        <div class="input-group">
-          <label for="model">手机型号</label>
-          <input type="text" id="model" placeholder="例如：IPHONE15">
-        </div>
-      </div>
-
-      <div class="size-controls">
-        <label for="aspectRatio">手机屏幕比例调整</label>
-        <input type="range" id="aspectRatio" min="16" max="22" value="19.5" step="0.5">
-        <div class="size-display">当前比例：9:19.5</div>
-      </div>
-
-      <div class="phone-container" id="phoneContainer">
-        <div class="phone-screen"></div>
-        <div class="phone-notch"></div>
-        <div class="marking-area" id="markingArea"></div>
-        <div class="nfc-marker" id="nfcMarker"></div>
-      </div>
-
-      <div class="button-group">
-        <button id="generateBtn" disabled>生成JSON</button>
-        <button id="resetBtn">重置</button>
-        <button id="copyMarkBtn" disabled>复制结果</button>
-        <button id="submitPRBtn" disabled>提交PR</button>
-      </div>
-
-      <div id="markResult">暂无结果</div>
-    </div>
-
-    <!-- 检测功能的内容 -->
-    <div id="detectTab" class="tab-content">
-      <p>上传手机图片文件夹，自动检测NFC位置信息</p>
-
-      <div class="instructions">
-        <h3>使用说明</h3>
-        <ul>
+      
+      <!-- 批量检测的使用说明 -->
+      <div class="instruction-content" id="detectInstructions">
+        <ol>
           <li>选择包含手机图片的文件夹进行上传</li>
           <li>文件夹结构应为：品牌/型号/图片文件</li>
           <li>支持的图片格式：PNG、JPG、JPEG</li>
           <li>图片应清晰显示手机正面，且NFC区域需要用红色框标记</li>
-          <li>处理完成后可以下载或复制JSON结果</li>
-          <li>异常检测结果会在下方显示，可点击查看详情</li>
-        </ul>
+          <li>处理完成后可以：
+            <ul>
+              <li>下载JSON结果</li>
+              <li>复制结果到剪贴板</li>
+              <li>查看异常检测结果详情</li>
+            </ul>
+          </li>
+        </ol>
       </div>
-
-      <div class="upload-section">
-        <div class="file-input-wrapper">
-          <label class="custom-file-upload">
-            <input type="file" id="folderInput" webkitdirectory directory multiple>
-            选择文件夹
-          </label>
-        </div>
-        <div class="progress">
-          处理进度：<span id="progress">0/0</span>
-        </div>
-      </div>
-
-      <div class="button-group">
-        <button id="downloadBtn" style="display:none;">下载JSON结果</button>
-        <button id="copyBtn" style="display:none;">复制结果</button>
-      </div>
-
-      <div id="results">暂无结果</div>
-      <canvas id="imageCanvas"></canvas>
     </div>
   </div>
 
@@ -689,20 +773,23 @@
     // Tab切换功能
     const tabButtons = document.querySelectorAll('.tab-button');
     const tabContents = document.querySelectorAll('.tab-content');
+    const instructionContents = document.querySelectorAll('.instruction-content');
 
     tabButtons.forEach(button => {
       button.addEventListener('click', () => {
         // 移除所有active类
         tabButtons.forEach(btn => btn.classList.remove('active'));
         tabContents.forEach(content => content.classList.remove('active'));
+        instructionContents.forEach(content => content.classList.remove('active'));
 
         // 添加active类到当前选中的tab
         button.classList.add('active');
-        const tabId = button.getAttribute('data-tab') + 'Tab';
-        document.getElementById(tabId).classList.add('active');
+        const tabId = button.getAttribute('data-tab');
+        document.getElementById(tabId + 'Tab').classList.add('active');
+        document.getElementById(tabId + 'Instructions').classList.add('active');
 
         // 重置两个tab的状态
-        if (button.getAttribute('data-tab') === 'detect') {
+        if (tabId === 'detect') {
           // 重置检测tab的状态
           if (typeof resetDetectTab === 'function') {
             resetDetectTab();
