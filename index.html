@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NFC位置批量检测器</title>
+  <title>NFC位置工具</title>
   <style>
     * {
       box-sizing: border-box;
@@ -12,11 +12,25 @@
       padding: 0;
     }
 
+    :root {
+      --primary-color: #1a73e8;
+      --primary-hover: #1557b0;
+      --secondary-color: #5f6368;
+      --border-color: #dadce0;
+      --background-light: #f8f9fa;
+      --text-primary: #202124;
+      --text-secondary: #5f6368;
+      --error-color: #d93025;
+      --success-color: #188038;
+      --warning-bg: #fff3e0;
+      --warning-border: #ffcc80;
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       line-height: 1.6;
-      color: #333;
-      background-color: #f8f9fa;
+      color: var(--text-primary);
+      background-color: var(--background-light);
       padding: 20px;
     }
 
@@ -26,27 +40,28 @@
       padding: 20px;
       background-color: white;
       border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 1px 2px 0 rgba(60,64,67,0.3), 0 2px 6px 2px rgba(60,64,67,0.15);
     }
 
     .header {
       margin-bottom: 20px;
       padding-bottom: 15px;
-      border-bottom: 2px solid #eee;
+      border-bottom: 1px solid var(--border-color);
     }
 
     .header h1 {
       font-size: 24px;
-      color: #2c3e50;
+      color: var(--text-primary);
       margin-bottom: 10px;
+      font-weight: 500;
     }
 
     .upload-section {
       margin-bottom: 20px;
-      padding: 20px;
-      background-color: #f8f9fa;
-      border-radius: 6px;
-      border: 2px dashed #dee2e6;
+      padding: 24px;
+      background-color: var(--background-light);
+      border-radius: 8px;
+      border: 2px dashed var(--border-color);
     }
 
     .file-input-wrapper {
@@ -59,25 +74,28 @@
 
     .custom-file-upload {
       display: inline-block;
-      padding: 10px 20px;
-      background-color: #007bff;
+      padding: 10px 24px;
+      background-color: var(--primary-color);
       color: white;
       border-radius: 4px;
       cursor: pointer;
-      transition: background-color 0.3s;
+      transition: all 0.3s ease;
+      font-weight: 500;
     }
 
     .custom-file-upload:hover {
-      background-color: #0056b3;
+      background-color: var(--primary-hover);
+      box-shadow: 0 1px 2px rgba(60,64,67,0.3);
     }
 
     .progress {
       margin: 15px 0;
-      padding: 10px;
-      background-color: #e9ecef;
+      padding: 12px;
+      background-color: var(--background-light);
       border-radius: 4px;
       font-size: 14px;
-      color: #495057;
+      color: var(--text-secondary);
+      border: 1px solid var(--border-color);
     }
 
     .button-group {
@@ -87,36 +105,39 @@
     }
 
     button {
-      padding: 10px 20px;
-      background-color: #28a745;
+      padding: 10px 24px;
+      background-color: var(--primary-color);
       color: white;
       border: none;
       border-radius: 4px;
       cursor: pointer;
       font-size: 14px;
-      transition: background-color 0.3s;
+      font-weight: 500;
+      transition: all 0.3s ease;
     }
 
     button:hover {
-      background-color: #218838;
+      background-color: var(--primary-hover);
+      box-shadow: 0 1px 2px rgba(60,64,67,0.3);
     }
 
     button:disabled {
-      background-color: #6c757d;
+      background-color: var(--secondary-color);
       cursor: not-allowed;
+      opacity: 0.7;
     }
 
-    #results {
+    #results, #markResult {
       margin-top: 20px;
-      padding: 15px;
-      background: #f8f9fa;
-      border-radius: 6px;
+      padding: 20px;
+      background: var(--background-light);
+      border-radius: 8px;
       font-family: 'Monaco', 'Consolas', monospace;
       white-space: pre;
       overflow-x: auto;
       max-height: 400px;
       overflow-y: auto;
-      border: 1px solid #dee2e6;
+      border: 1px solid var(--border-color);
       font-size: 14px;
       line-height: 1.5;
     }
@@ -133,11 +154,10 @@
       position: fixed;
       top: 20px;
       right: 20px;
-      background: rgba(40, 167, 69, 0.9);
+      background: var(--success-color);
       color: white;
       padding: 10px 20px;
       border-radius: 4px;
-      display: none;
       animation: fadeInOut 2s ease-in-out;
       z-index: 1000;
     }
@@ -170,7 +190,7 @@
       object-fit: contain;
       border: 1px solid #dee2e6;
       border-radius: 4px;
-      display: none; /* 默认隐藏 */
+      display: none;
     }
 
     .summary ul {
@@ -202,51 +222,293 @@
     }
 
     @keyframes fadeInOut {
-      0% { opacity: 0; }
-      10% { opacity: 1; }
-      90% { opacity: 1; }
-      100% { opacity: 0; }
+      0% { opacity: 0; transform: translateY(-20px); }
+      10% { opacity: 1; transform: translateY(0); }
+      90% { opacity: 1; transform: translateY(0); }
+      100% { opacity: 0; transform: translateY(-20px); }
     }
 
     .reason-group {
-        margin-bottom: 20px;
-        background: white;
-        padding: 15px;
-        border-radius: 4px;
+      margin-bottom: 20px;
+      background: white;
+      padding: 15px;
+      border-radius: 4px;
     }
 
     .reason-group h4 {
-        color: #856404;
-        margin-bottom: 10px;
-        padding-bottom: 5px;
-        border-bottom: 1px solid #ffeeba;
+      color: #856404;
+      margin-bottom: 10px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid #ffeeba;
     }
 
     .summary-preview canvas {
-        max-width: 100%;
-        max-height: 500px;
-        object-fit: contain;
-        border: 1px solid #dee2e6;
-        border-radius: 4px;
-        display: none;
+      max-width: 100%;
+      max-height: 500px;
+      object-fit: contain;
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      display: none;
     }
 
     .summary {
-        display: flex;
-        gap: 20px;
+      display: flex;
+      gap: 20px;
     }
 
     .summary-info {
-        flex: 1;
-        overflow-y: auto;
-        max-height: 80vh;
+      flex: 1;
+      overflow-y: auto;
+      max-height: 80vh;
     }
 
     .summary-preview {
-        flex: 1;
-        position: sticky;
-        top: 20px;
-        align-self: flex-start;
+      flex: 1;
+      position: sticky;
+      top: 20px;
+      align-self: flex-start;
+    }
+
+    .tab-container {
+      margin-bottom: 30px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .tab-buttons {
+      display: flex;
+      gap: 20px;
+      padding: 0 20px;
+    }
+
+    .tab-button {
+      padding: 12px 24px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 16px;
+      color: var(--text-secondary);
+      position: relative;
+      transition: all 0.3s ease;
+      font-weight: 500;
+    }
+
+    .tab-button:hover {
+      color: var(--primary-color);
+      background-color: rgba(26, 115, 232, 0.1);
+      border-radius: 4px;
+    }
+
+    .tab-button.active {
+      color: var(--primary-color);
+    }
+
+    .tab-button.active::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background-color: var(--primary-color);
+      border-radius: 3px 3px 0 0;
+    }
+
+    .tab-content {
+      display: none;
+      opacity: 0;
+      transition: opacity 0.3s ease-in-out;
+    }
+
+    .tab-content.active {
+      display: block;
+      opacity: 1;
+    }
+
+    /* 手机模型相关样式 */
+    .phone-container {
+      position: relative;
+      width: 300px;
+      height: 650px;
+      margin: 30px auto;
+      background: #f5f5f5;
+      border-radius: 40px;
+      border: 2px solid #333;
+      overflow: hidden;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    .phone-screen {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      background: white;
+      border-radius: 30px;
+      box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+    }
+
+    .phone-notch {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 150px;
+      height: 25px;
+      background: #333;
+      border-bottom-left-radius: 15px;
+      border-bottom-right-radius: 15px;
+    }
+
+    .marking-area {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      cursor: crosshair;
+    }
+
+    .nfc-marker {
+      position: absolute;
+      border: 2px solid red;
+      background-color: rgba(255, 0, 0, 0.2);
+      display: none;
+      pointer-events: none;
+    }
+
+    /* 标记功能的输入区域样式 */
+    .input-group {
+      margin-bottom: 15px;
+    }
+
+    .input-group label {
+      display: block;
+      margin-bottom: 5px;
+      color: #333;
+    }
+
+    .input-group input {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    .size-controls {
+      margin: 20px 0;
+    }
+
+    .size-controls label {
+      display: block;
+      margin-bottom: 10px;
+    }
+
+    .size-controls input[type="range"] {
+      width: 100%;
+      margin-bottom: 10px;
+    }
+
+    .size-display {
+      text-align: center;
+      color: #666;
+    }
+
+    #markResult {
+      margin-top: 20px;
+      padding: 20px;
+      background: var(--background-light);
+      border-radius: 8px;
+      font-family: 'Monaco', 'Consolas', monospace;
+      white-space: pre;
+      overflow-x: auto;
+      border: 1px solid var(--border-color);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* 标记功能的说明样式 */
+    #markTab .instructions {
+      margin: 20px 0;
+      padding: 20px;
+      background: var(--warning-bg);
+      border: 1px solid var(--warning-border);
+      border-radius: 8px;
+    }
+
+    #markTab .instructions h3 {
+      color: var(--text-primary);
+      margin-bottom: 12px;
+      font-weight: 500;
+    }
+
+    #markTab .instructions ul {
+      margin-left: 20px;
+      color: var(--text-secondary);
+    }
+
+    #markTab .instructions li {
+      margin-bottom: 5px;
+      color: #666;
+    }
+
+    /* 标记功能的按钮样式 */
+    #markTab .button-group {
+      margin: 20px 0;
+      display: flex;
+      gap: 10px;
+    }
+
+    #markTab button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.3s;
+    }
+
+    #markTab button:disabled {
+      background-color: #6c757d;
+      cursor: not-allowed;
+    }
+
+    #markTab button:not(:disabled):hover {
+      opacity: 0.9;
+    }
+
+    /* 标记功能的上传区域样式 */
+    #markTab .upload-section {
+      margin-bottom: 20px;
+      padding: 20px;
+      background-color: #f8f9fa;
+      border-radius: 6px;
+    }
+
+    /* 检测功能的说明样式 */
+    #detectTab .instructions {
+      margin: 20px 0;
+      padding: 20px;
+      background: var(--warning-bg);
+      border: 1px solid var(--warning-border);
+      border-radius: 8px;
+    }
+
+    #detectTab .instructions h3 {
+      color: var(--text-primary);
+      margin-bottom: 12px;
+      font-weight: 500;
+    }
+
+    #detectTab .instructions ul {
+      margin-left: 20px;
+      color: var(--text-secondary);
+    }
+
+    #detectTab .instructions li {
+      margin-bottom: 5px;
+      color: #666;
     }
   </style>
 </head>
@@ -255,622 +517,159 @@
 <body>
   <div class="container">
     <div class="header">
-      <h1>NFC位置批量检测器</h1>
-      <p>上传手机图片文件夹，自动检测NFC位置信息</p>
+      <h1>NFC位置工具</h1>
     </div>
 
-    <div class="upload-section">
-      <div class="file-input-wrapper">
-        <label class="custom-file-upload">
-          <input type="file" id="folderInput" webkitdirectory directory multiple>
-          选择文件夹
-        </label>
-      </div>
-      <div class="progress">
-        处理进度：<span id="progress">0/0</span>
+    <div class="tab-container">
+      <div class="tab-buttons">
+        <button class="tab-button active" data-tab="mark">手动标记</button>
+        <button class="tab-button" data-tab="detect">批量检测</button>
       </div>
     </div>
 
-    <div class="button-group">
-      <button id="downloadBtn" style="display:none;">下载JSON结果</button>
-      <button id="copyBtn" style="display:none;">复制结果</button>
+    <!-- 标记功能的内容 -->
+    <div id="markTab" class="tab-content active">
+        <p>在手机模型上标记NFC区域位置</p>
+
+        <div class="instructions">
+            <h3>使用说明</h3>
+            <ul>
+                <li>输入手机品牌和型号</li>
+                <li>调整手机尺寸比例（默认9:19.5）</li>
+                <li>在手机模型上按住鼠标左键并拖动来标记NFC区域（将显示为红色框）</li>
+                <li>标记完成后点击生成JSON按钮获取结果</li>
+                <li>如需重新标记，可以点击重置按钮</li>
+            </ul>
+        </div>
+
+        <div class="upload-section">
+            <div class="input-group">
+                <label for="brand">手机品牌</label>
+                <input type="text" id="brand" placeholder="例如：APPLE">
+            </div>
+            <div class="input-group">
+                <label for="model">手机型号</label>
+                <input type="text" id="model" placeholder="例如：IPHONE15">
+            </div>
+        </div>
+
+        <div class="size-controls">
+            <label for="aspectRatio">手机屏幕比例调整</label>
+            <input type="range" id="aspectRatio" min="16" max="22" value="19.5" step="0.5">
+            <div class="size-display">当前比例：9:19.5</div>
+        </div>
+
+        <div class="phone-container" id="phoneContainer">
+            <div class="phone-screen"></div>
+            <div class="phone-notch"></div>
+            <div class="marking-area" id="markingArea"></div>
+            <div class="nfc-marker" id="nfcMarker"></div>
+        </div>
+
+        <div class="button-group">
+            <button id="generateBtn" disabled>生成JSON</button>
+            <button id="resetBtn">重置</button>
+            <button id="copyMarkBtn" disabled>复制结果</button>
+        </div>
+
+        <div id="markResult">暂无结果</div>
     </div>
 
-    <div id="results">暂无结果</div>
-    <canvas id="imageCanvas"></canvas>
+    <!-- 检测功能的内容 -->
+    <div id="detectTab" class="tab-content">
+        <p>上传手机图片文件夹，自动检测NFC位置信息</p>
+        
+        <div class="instructions">
+            <h3>使用说明</h3>
+            <ul>
+                <li>选择包含手机图片的文件夹进行上传</li>
+                <li>文件夹结构应为：品牌/型号/图片文件</li>
+                <li>支持的图片格式：PNG、JPG、JPEG</li>
+                <li>图片应清晰显示手机正面，且NFC区域需要用红色框标记</li>
+                <li>处理完成后可以下载或复制JSON结果</li>
+                <li>异常检测结果会在下方显示，可点击查看详情</li>
+            </ul>
+        </div>
+        
+        <div class="upload-section">
+            <div class="file-input-wrapper">
+                <label class="custom-file-upload">
+                    <input type="file" id="folderInput" webkitdirectory directory multiple>
+                    选择文件夹
+                </label>
+            </div>
+            <div class="progress">
+                处理进度：<span id="progress">0/0</span>
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button id="downloadBtn" style="display:none;">下载JSON结果</button>
+            <button id="copyBtn" style="display:none;">复制结果</button>
+        </div>
+
+        <div id="results">暂无结果</div>
+        <canvas id="imageCanvas"></canvas>
+    </div>
   </div>
-  <div id="copySuccess" class="copy-success">复制成功！</div>
 
   <script>
-    const canvas = document.getElementById('imageCanvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    const folderInput = document.getElementById('folderInput');
-    const resultsDiv = document.getElementById('results');
-    const progressSpan = document.getElementById('progress');
-    const downloadBtn = document.getElementById('downloadBtn');
-    const copyBtn = document.getElementById('copyBtn');
-    const copySuccess = document.getElementById('copySuccess');
+    // Tab切换功能
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabContents = document.querySelectorAll('.tab-content');
 
-    let allResults = [];
-    let totalFiles = 0;
-    let processedFiles = 0;
-    let unmatchedImages = [];
+    tabButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        // 移除所有active类
+        tabButtons.forEach(btn => btn.classList.remove('active'));
+        tabContents.forEach(content => content.classList.remove('active'));
 
-    // 修改文件夹上传的处理函数
-    folderInput.addEventListener('change', async function (e) {
-      const files = Array.from(e.target.files).filter(file =>
-        file.type.startsWith('image/')
-      );
+        // 添加active类到当前选中的tab
+        button.classList.add('active');
+        const tabId = button.getAttribute('data-tab') + 'Tab';
+        document.getElementById(tabId).classList.add('active');
 
-      // 清空之前的结果
-      totalFiles = files.length;
-      processedFiles = 0;
-      allResults = [];
-      unmatchedImages = [];
-      
-      // 清空显示
-      updateResults(allResults);
-      updateProgress();
-      
-      // 移除之前的异常检测结果统计
-      const oldSummary = document.querySelector('.summary');
-      if (oldSummary) {
-        oldSummary.remove();
-      }
-
-      // 处理新文件
-      for (const file of files) {
-        await processFile(file);
-      }
-
-      showUnmatchedSummary();
-    });
-
-    // 下载结果
-    downloadBtn.addEventListener('click', function () {
-      const jsonString = JSON.stringify(allResults, null, 2);
-      const blob = new Blob([jsonString], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'nfc_locations.json';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    });
-
-    // 更新进度显示
-    function updateProgress() {
-      progressSpan.textContent = `${processedFiles}/${totalFiles}`;
-    }
-
-    // 从文件路径构建模型名称
-    function buildModelName(filePath) {
-      const parts = filePath.split('/');
-      // 移除文件名
-      parts.pop();
-      // 移除空字符串
-      return parts.filter(part => part).join(' ');
-    }
-
-    // 处理单个文件
-    async function processFile(file) {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = function(event) {
-          const img = new Image();
-          img.onload = function() {
-            const result = processImage(img);
-
-            if (result) {
-              const pathParts = file.webkitRelativePath.split('/').filter(part => part);
-              let model = 'UNKNOWN';
-              let brand = 'UNKNOWN';
-              
-              if (pathParts.length >= 2) {
-                model = pathParts[pathParts.length - 2];
-                if (pathParts.length >= 3) {
-                  brand = pathParts[pathParts.length - 3];
-                }
-              }
-
-              // 检查异常情况
-              const isAbnormal = checkAbnormalResult(result.nfcLocation);
-              if (isAbnormal) {
-                // 如果是异常情况，只添加到未匹配列表，不添加到结果中
-                unmatchedImages.push({
-                  name: file.name,
-                  path: file.webkitRelativePath,
-                  reason: isAbnormal,
-                  data: {
-                    deviceWidth: result.nfcLocation.deviceWidth,
-                    deviceHeight: result.nfcLocation.deviceHeight,
-                    nfcTop: result.nfcLocation.top,
-                    nfcLeft: result.nfcLocation.left,
-                    nfcWidth: result.nfcLocation.width,
-                    nfcHeight: result.nfcLocation.height
-                  },
-                  imageData: event.target.result
-                });
-              } else {
-                // 只有正常的结果才添加到 JSON 中
-                const resultObject = {
-                  device: {
-                    brand: brand.toUpperCase(),
-                    model: model.toUpperCase(),
-                    width: result.nfcLocation.deviceWidth,
-                    height: result.nfcLocation.deviceHeight
-                  },
-                  nfcLocation: {
-                    top: result.nfcLocation.top,
-                    left: result.nfcLocation.left,
-                    width: result.nfcLocation.width,
-                    height: result.nfcLocation.height
-                  }
-                };
-                allResults.push(resultObject);
-              }
-            } else {
-              // 未检测到 NFC 区域的情况
-              unmatchedImages.push({
-                name: file.name,
-                path: file.webkitRelativePath,
-                reason: '未检测到有效的NFC区域',
-                imageData: event.target.result
-              });
-            }
-
-            // 更新显示
-            updateResults(allResults);
-            processedFiles++;
-            updateProgress();
-            resolve();
+        // 重置两个tab的状态
+        if (button.getAttribute('data-tab') === 'detect') {
+          // 重置检测tab的状态
+          if (typeof resetDetectTab === 'function') {
+            resetDetectTab();
           }
-          img.src = event.target.result;
+        } else {
+          // 重置标记tab的状态
+          if (typeof resetMarker === 'function') {
+            resetMarker();
+          }
         }
-        reader.readAsDataURL(file);
       });
-    }
-
-    // 检测设备边界（去除空白区域）
-    function detectDeviceBounds(imageData, width, height) {
-      const data = imageData.data;
-      let minX = width;
-      let minY = height;
-      let maxX = 0;
-      let maxY = 0;
-
-      // 用于记录每行和每列的非透明且非白色像素计数
-      const rowCounts = new Array(height).fill(0);
-      const colCounts = new Array(width).fill(0);
-
-      // 第一遍扫描：统计每行每列的有效像素
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const index = (y * width + x) * 4;
-          const r = data[index];
-          const g = data[index + 1];
-          const b = data[index + 2];
-          const a = data[index + 3];
-
-          // 改进的像素检测逻辑
-          // 1. 检查透明度
-          const isTransparent = a < 10;
-          // 2. 检查是否是纯白色或接近白色
-          const isWhite = r > 240 && g > 240 && b > 240;
-          // 3. 检查是否是设备的一部分（通常是灰色或其他颜色）
-          const isDevicePixel = !isTransparent && !isWhite;
-
-          if (isDevicePixel) {
-            rowCounts[y]++;
-            colCounts[x]++;
-          }
-        }
-      }
-
-      // 设定最小有效像素阈值（比如行宽度的1%）
-      const minRowPixels = Math.floor(width * 0.01);
-      const minColPixels = Math.floor(height * 0.01);
-
-      // 查找有效的设备边界
-      let foundTop = false;
-      let foundBottom = false;
-      let foundLeft = false;
-      let foundRight = false;
-
-      // 从上到下查找第一个有效行
-      for (let y = 0; y < height; y++) {
-        if (!foundTop && rowCounts[y] > minRowPixels) {
-          minY = y;
-          foundTop = true;
-        }
-        if (foundTop && !foundBottom && y > minY) {
-          // 检查是否是真正的底部边界
-          let isGap = true;
-          for (let checkY = y; checkY < Math.min(y + 10, height); checkY++) {
-            if (rowCounts[checkY] > minRowPixels) {
-              isGap = false;
-              break;
-            }
-          }
-          if (isGap) {
-            maxY = y - 1;
-            foundBottom = true;
-          }
-        }
-      }
-
-      // 从左到右查找第一个有效列
-      for (let x = 0; x < width; x++) {
-        if (!foundLeft && colCounts[x] > minColPixels) {
-          minX = x;
-          foundLeft = true;
-        }
-        if (foundLeft && !foundRight && x > minX) {
-          // 检查是否是真正的右侧边界
-          let isGap = true;
-          for (let checkX = x; checkX < Math.min(x + 10, width); checkX++) {
-            if (colCounts[checkX] > minColPixels) {
-              isGap = false;
-              break;
-            }
-          }
-          if (isGap) {
-            maxX = x - 1;
-            foundRight = true;
-          }
-        }
-      }
-
-      // 如果没有找到底部或右侧边界，使用最后的有效位置
-      if (!foundBottom) {
-        for (let y = height - 1; y >= minY; y--) {
-          if (rowCounts[y] > minRowPixels) {
-            maxY = y;
-            break;
-          }
-        }
-      }
-      if (!foundRight) {
-        for (let x = width - 1; x >= minX; x--) {
-          if (colCounts[x] > minColPixels) {
-            maxX = x;
-            break;
-          }
-        }
-      }
-
-      // 验证检测到的边界是否合理
-      const detectedWidth = maxX - minX;
-      const detectedHeight = maxY - minY;
-      const aspectRatio = detectedWidth / detectedHeight;
-
-      // 手机的宽高比通常在 0.4 到 0.6 之间
-      if (aspectRatio < 0.4 || aspectRatio > 0.6 || 
-          detectedWidth < width * 0.2 || detectedHeight < height * 0.2) {
-          console.log('检测到的设备边界可能不准确，使用原始尺寸');
-          return {
-              x: 0,
-              y: 0,
-              width: width,
-              height: height
-          };
-      }
-
-      return {
-          x: minX,
-          y: minY,
-          width: detectedWidth,
-          height: detectedHeight
-      };
-    }
-
-    // 处理图片的函数
-    function processImage(img) {
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.drawImage(img, 0, 0);
-
-      // 检测设备边界
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const deviceBounds = detectDeviceBounds(imageData, canvas.width, canvas.height);
-      
-      // 在原图上标记设备边界
-      ctx.strokeStyle = 'green';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(deviceBounds.x, deviceBounds.y, deviceBounds.width, deviceBounds.height);
-
-      // 获取裁剪后的设备区域的图像数据
-      const deviceImageData = ctx.getImageData(
-          deviceBounds.x, 
-          deviceBounds.y, 
-          deviceBounds.width, 
-          deviceBounds.height
-      );
-
-      // 使用检测到的设备尺寸和裁剪后的图像数据
-      return detectRedRectangle(deviceImageData, deviceBounds.width, deviceBounds.height);
-    }
-
-    function detectRedRectangle(deviceImageData, deviceWidth, deviceHeight) {
-      if (!deviceImageData || !deviceWidth || !deviceHeight) {
-          console.error('无效的设备图像数据或尺寸');
-          return null;
-      }
-
-      let result = detectColorRegion(deviceImageData, deviceWidth, deviceHeight, 
-          (r, g, b) => {
-              // 更精确的红色检测条件
-              return r > 180 && // 降低红色阈值
-                     g < 80 && // 提高绿色容差
-                     b < 80 && // 提高蓝色容差
-                     (r - g) > 100 && // 确保红色分量显著高于其他分量
-                     (r - b) > 100;
-          },
-          '红色'
-      );
-
-      if (!result) {
-          // 如果没有检测到红色区域，尝试检测黑色实线
-          result = detectColorRegion(deviceImageData, deviceWidth, deviceHeight, 
-              (r, g, b) => {
-                  // 更严格的黑色检测条件
-                  const brightness = (r + g + b) / 3;
-                  return brightness < 50 && Math.abs(r - g) < 10 && Math.abs(g - b) < 10;
-              },
-              '黑色'
-          );
-      }
-
-      return result;
-    }
-
-    function detectColorRegion(deviceImageData, deviceWidth, deviceHeight, colorCondition, colorName) {
-      if (!deviceImageData || !deviceImageData.data || !deviceWidth || !deviceHeight) {
-          console.error('无效的图像数据或设备尺寸');
-          return null;
-      }
-
-      const data = deviceImageData.data;
-      let minX = deviceWidth;
-      let minY = deviceHeight;
-      let maxX = 0;
-      let maxY = 0;
-      let foundColor = false;
-      let colorPixelCount = 0;
-      const totalPixels = deviceWidth * deviceHeight;
-
-      // 遍历裁剪后的设备区域
-      for (let y = 0; y < deviceHeight; y++) {
-          for (let x = 0; x < deviceWidth; x++) {
-              const index = (y * deviceWidth + x) * 4;
-              const r = data[index];
-              const g = data[index + 1];
-              const b = data[index + 2];
-              
-              if (colorCondition(r, g, b)) {
-                  colorPixelCount++;
-                  foundColor = true;
-                  minX = Math.min(minX, x);
-                  minY = Math.min(minY, y);
-                  maxX = Math.max(maxX, x);
-                  maxY = Math.max(maxY, y);
-              }
-          }
-      }
-
-      // ... 其余验证逻辑保持不变 ...
-
-      if (foundColor) {
-          // 调整坐标确保在线内
-          minX += 1;
-          minY += 1;
-          maxX -= 1;
-          maxY -= 1;
-
-          // 重新计算宽高
-          const adjustedWidth = maxX - minX;
-          const adjustedHeight = maxY - minY;
-
-          // 返回相对于设备边界的坐标
-          const result = {
-              nfcLocation: {
-                  top: minY,
-                  left: minX,
-                  width: adjustedWidth,
-                  height: adjustedHeight,
-                  deviceWidth: deviceWidth,
-                  deviceHeight: deviceHeight
-              }
-          };
-
-          return result;
-      }
-
-      return null;
-    }
-
-    // 修改显示结果的函数
-    function updateResults(results) {
-      const formattedJson = JSON.stringify(results, null, 2);
-      resultsDiv.innerHTML = `<pre>${formattedJson}</pre>`;
-
-      // 如果有结果，显示复制按钮
-      if (results && results.length > 0) {
-        copyBtn.style.display = 'block';
-        downloadBtn.style.display = 'block';
-      } else {
-        copyBtn.style.display = 'none';
-        downloadBtn.style.display = 'none';
-      }
-    }
-
-    // 添加复制功能
-    copyBtn.addEventListener('click', async function () {
-      try {
-        const formattedJson = JSON.stringify(allResults, null, 2);
-        await navigator.clipboard.writeText(formattedJson);
-
-        // 显示复制成功提示
-        copySuccess.style.display = 'block';
-        setTimeout(() => {
-          copySuccess.style.display = 'none';
-        }, 2000);
-      } catch (err) {
-        console.error('复制失败:', err);
-        alert('复制失败，请手动复制');
-      }
     });
 
-    // 修改异常检测函数，简化分类
-    function checkAbnormalResult(nfcLocation) {
-        const {
-            top,
-            left,
-            width,
-            height,
-            deviceWidth,
-            deviceHeight
-        } = nfcLocation;
-
-        // 检查设备尺寸是否异常（可能是部分图片）
-        const normalAspectRatioMin = 0.4;
-        const normalAspectRatioMax = 0.65;
-        const currentAspectRatio = deviceWidth / deviceHeight;
-
-        if (currentAspectRatio < normalAspectRatioMin || currentAspectRatio > normalAspectRatioMax) {
-            return '设备宽高比异常';
-        }
-
-        // 检查 NFC 区域大小是否合理
-        const nfcAreaRatio = (width * height) / (deviceWidth * deviceHeight);
-        if (nfcAreaRatio > 0.3) {
-            return 'NFC区域过大';
-        }
-
-        // 检查 NFC 区域的位置是否在合理范围内
-        if (top < 0 || left < 0 || top + height > deviceHeight || left + width > deviceWidth) {
-            return 'NFC区域位置异常';
-        }
-
-        return null;
-    }
-
-    // 修改显示未匹配图片的代码
-    function showUnmatchedSummary() {
-        if (unmatchedImages.length > 0) {
-            // 按主要类别分组
-            const groupedByReason = {
-                '设备宽高比异常': [],
-                'NFC区域过大': [],
-                'NFC区域过小': [],
-                'NFC区域位置异常': [],
-                '未检测到有效的NFC区域': []
-            };
-
-            unmatchedImages.forEach(img => {
-                const reason = img.reason;
-                // 确保分组存在，如果是新的原因，添加到其他类别
-                if (groupedByReason.hasOwnProperty(reason)) {
-                    groupedByReason[reason].push(img);
-                }
-            });
-
-            const summaryDiv = document.createElement('div');
-            summaryDiv.className = 'summary';
-            
-            // 创建信息部分
-            const infoDiv = document.createElement('div');
-            infoDiv.className = 'summary-info';
-            infoDiv.innerHTML = `
-                <h3>异常检测结果统计</h3>
-                <p>总图片数: ${totalFiles}</p>
-                <p>成功匹配: ${allResults.length}</p>
-                <p>异常检测: ${unmatchedImages.length}</p>
-                ${Object.entries(groupedByReason)
-                    .filter(([_, images]) => images.length > 0) // 只显示有图片的分类
-                    .map(([reason, images]) => `
-                        <div class="reason-group">
-                            <h4>${reason} (${images.length}张)</h4>
-                            <ul>
-                                ${images.map((img, index) => `
-                                    <li data-group="${reason}" data-index="${index}" onclick="showPreview('${reason}', ${index})">
-                                        <strong>${img.path}</strong><br>
-                                        ${img.data ? `
-                                            设备尺寸: ${img.data.deviceWidth}x${img.data.deviceHeight}<br>
-                                            NFC位置: (${img.data.nfcLeft}, ${img.data.nfcTop}, ${img.data.nfcWidth}, ${img.data.nfcHeight})
-                                        ` : ''}
-                                    </li>
-                                `).join('')}
-                            </ul>
-                        </div>
-                    `).join('')}
-            `;
-
-            // 创建预览部分
-            const previewDiv = document.createElement('div');
-            previewDiv.className = 'summary-preview';
-            previewDiv.innerHTML = `
-                <h4>图片预览</h4>
-                <canvas id="previewCanvas"></canvas>
-                <p id="previewPlaceholder">点击左侧列表查看图片预览</p>
-            `;
-
-            summaryDiv.appendChild(infoDiv);
-            summaryDiv.appendChild(previewDiv);
-            resultsDiv.parentNode.insertBefore(summaryDiv, resultsDiv);
-        }
-    }
-
-    // 修改预览功能
-    function showPreview(reason, index) {
-        const groupedImages = unmatchedImages.filter(img => img.reason === reason);
-        const img = groupedImages[index];
-        const previewCanvas = document.getElementById('previewCanvas');
-        const placeholder = document.getElementById('previewPlaceholder');
-        const ctx = previewCanvas.getContext('2d');
+    // 防止两个tab的功能互相干扰
+    function resetDetectTab() {
+      // 重置检测相关的变量和显示
+      if (typeof allResults !== 'undefined') {
+        allResults = [];
+        unmatchedImages = [];
+        totalFiles = 0;
+        processedFiles = 0;
+        updateResults(allResults);
+        updateProgress();
         
-        // 移除所有 li 的 active 类
-        document.querySelectorAll('.summary li').forEach(li => {
-            li.classList.remove('active');
-        });
-        
-        // 添加 active 类到当前选中的 li
-        document.querySelector(`.summary li[data-group="${reason}"][data-index="${index}"]`).classList.add('active');
-
-        // 加载并显示图片
-        const image = new Image();
-        image.onload = function() {
-            // 设置canvas尺寸
-            previewCanvas.width = image.width;
-            previewCanvas.height = image.height;
-            previewCanvas.style.display = 'block';
-            placeholder.style.display = 'none';
-
-            // 绘制原图
-            ctx.drawImage(image, 0, 0);
-
-            // 如果有设备边界信息，绘制边界框
-            if (img.data) {
-                // 绘制设备边界（绿色）
-                ctx.strokeStyle = 'green';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(0, 0, img.data.deviceWidth, img.data.deviceHeight);
-
-                // 绘制NFC区域（红色）
-                ctx.strokeStyle = '#0000FF';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(
-                    img.data.nfcLeft,
-                    img.data.nfcTop,
-                    img.data.nfcWidth,
-                    img.data.nfcHeight
-                );
-            }
-        };
-        image.src = img.imageData;
+        const oldSummary = document.querySelector('.summary');
+        if (oldSummary) {
+          oldSummary.remove();
+        }
+      }
     }
+
+    // 确保两个tab的脚本不会命名冲突
+    const detectScript = document.createElement('script');
+    detectScript.src = 'detect.js';  // 将原 index.html 的脚本部分移到这个文件
+    document.body.appendChild(detectScript);
+
+    const markScript = document.createElement('script');
+    markScript.src = 'mark.js';  // 将原 mark.html 的脚本部分移到这个文件
+    document.body.appendChild(markScript);
   </script>
 </body>
 
