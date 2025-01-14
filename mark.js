@@ -40,8 +40,8 @@ function showSuccessMessage(message) {
  */
 aspectRatioInput.addEventListener('input', function() {
     const ratio = this.value;
-    phoneContainer.style.aspectRatio = `9/${ratio}`;
     sizeDisplay.textContent = `当前比例：9:${ratio}`;
+    phoneContainer.style.aspectRatio = `9/${ratio}`;
 });
 
 /**
