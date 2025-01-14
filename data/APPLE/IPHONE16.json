@@ -1,0 +1,14 @@
+{
+  "device": {
+    "brand": "APPLE",
+    "model": "IPHONE16",
+    "width": 430,
+    "height": 932
+  },
+  "nfcLocation": {
+    "top": 406,
+    "left": 59,
+    "width": 239,
+    "height": 168
+  }
+}
