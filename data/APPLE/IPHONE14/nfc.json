@@ -1,0 +1,14 @@
+{
+  "device": {
+    "brand": "APPLE",
+    "model": "IPHONE14",
+    "width": 430,
+    "height": 932
+  },
+  "nfcLocation": {
+    "top": 484,
+    "left": 206,
+    "width": 128,
+    "height": 179
+  }
+}
