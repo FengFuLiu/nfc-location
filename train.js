@@ -12,30 +12,12 @@ const valAccuracy = document.getElementById('valAccuracy');
 tf.setBackend('cpu');
 console.log('当前使用的后端:', tf.getBackend());
 
-// 添加初始化日志
-console.log('训练脚本已加载');
-console.log('DOM元素状态:', {
-  trainingDataInput: !!trainingDataInput,
-  datasetCount: !!datasetCount,
-  startTrainBtn: !!startTrainBtn,
-  stopTrainBtn: !!stopTrainBtn,
-  exportModelBtn: !!exportModelBtn,
-  currentEpoch: !!currentEpoch,
-  trainLoss: !!trainLoss,
-  valAccuracy: !!valAccuracy
-});
-
-// 训练配置
-const epochsInput = document.getElementById('epochs') || { value: '50' };
-const batchSizeInput = document.getElementById('batchSize') || { value: '32' };
-const learningRateInput = document.getElementById('learningRate') || { value: '0.001' };
-
 // 训练数据
 let trainingData = {
   images: [], // 存储预处理后的图片张量
   labels: [], // 存储NFC区域坐标 [x, y, width, height]
-  annotations: null // COCO格式的标注数据
 };
+
 let model = null;
 let isTraining = false;
 
@@ -71,130 +53,6 @@ const chart = new Chart(trainingChartCtx, {
   }
 });
 
-// 图片预处理
-async function preprocessImage(file) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = async () => {
-      try {
-        // 创建canvas用于图片处理
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        
-        // 绘制原始图片
-        ctx.drawImage(img, 0, 0);
-        
-        // 获取图片数据
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-        
-        // 检测标记框（支持多种颜色）
-        let nfcBox = null;
-        let boxColor = null;
-        
-        // 扫描图片像素寻找标记框
-        for (let y = 0; y < canvas.height; y++) {
-          for (let x = 0; x < canvas.width; x++) {
-            const i = (y * canvas.width + x) * 4;
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-            const a = data[i + 3];
-            
-            // 计算颜色的亮度和饱和度
-            const max = Math.max(r, g, b);
-            const min = Math.min(r, g, b);
-            const lightness = (max + min) / 2;
-            const saturation = max === min ? 0 : (max - min) / (lightness > 0.5 ? (2 - max - min) : (max + min));
-            
-            // 检查是否是标记框的颜色
-            const isColoredBox = (
-              // 红色: 高红色值，低绿蓝值
-              (r > 150 && g < 100 && b < 100) ||
-              // 绿色: 高绿色值，低红蓝值
-              (r < 100 && g > 150 && b < 100) ||
-              // 蓝色: 高蓝色值，低红绿值
-              (r < 100 && g < 100 && b > 150) ||
-              // 黄色: 高红绿值，低蓝值
-              (r > 150 && g > 150 && b < 100) ||
-              // 白色: 高亮度，低饱和度
-              (lightness > 200 && saturation < 0.2) ||
-              // 其他高对比度颜色
-              (Math.abs(r - g) > 50 || Math.abs(r - b) > 50 || Math.abs(g - b) > 50)
-            );
-            
-            if (isColoredBox && a > 200) { // 确保不是透明像素
-              // 找到标记框的边界
-              if (!nfcBox) {
-                nfcBox = {minX: x, minY: y, maxX: x, maxY: y};
-                boxColor = {r, g, b};
-              } else {
-                nfcBox.minX = Math.min(nfcBox.minX, x);
-                nfcBox.minY = Math.min(nfcBox.minY, y);
-                nfcBox.maxX = Math.max(nfcBox.maxX, x);
-                nfcBox.maxY = Math.max(nfcBox.maxY, y);
-              }
-            }
-          }
-        }
-        
-        if (!nfcBox) {
-          // 如果没有找到标记框，尝试在控制台显示更多信息
-          console.warn(`未在图片中找到标记框: ${file.name}，请确保标记框颜色足够明显`);
-          throw new Error(`未在图片中找到标记框: ${file.name}`);
-        }
-        
-        // 计算标记框的位置和大小
-        const width = nfcBox.maxX - nfcBox.minX;
-        const height = nfcBox.maxY - nfcBox.minY;
-        
-        // 验证标记框大小是否合理
-        const minSize = 10; // 最小像素大小
-        if (width < minSize || height < minSize) {
-          throw new Error(`标记框太小，可能是噪点: ${file.name}`);
-        }
-        
-        // 归一化坐标（转换为0-1范围）
-        const normalizedBox = {
-          x: nfcBox.minX / canvas.width,
-          y: nfcBox.minY / canvas.height,
-          width: width / canvas.width,
-          height: height / canvas.height
-        };
-        
-        // 调整图片大小为模型输入尺寸
-        const tensor = tf.browser.fromPixels(img)
-          .resizeBilinear([224, 224])
-          .toFloat()
-          .div(255.0)
-          .expandDims();
-          
-        resolve({
-          tensor: tensor,
-          box: [normalizedBox.x, normalizedBox.y, normalizedBox.width, normalizedBox.height]
-        });
-      } catch (err) {
-        reject(err);
-      }
-    };
-    img.onerror = reject;
-    img.src = URL.createObjectURL(file);
-  });
-}
-
-// 从文件名解析标签信息
-function parseLabel(filename) {
-  // 假设文件名格式为: "x_y_w_h.jpg"
-  // 例如: "100_200_50_30.jpg" 表示 NFC 区域在 (100,200) 位置，宽50像素，高30像素
-  const parts = filename.split('.')[0].split('_');
-  if (parts.length !== 4) {
-    throw new Error(`文件名格式错误: ${filename}`);
-  }
-  return parts.map(Number);
-}
-
 // 加载标注文件
 async function loadAnnotations(file) {
   return new Promise((resolve, reject) => {
@@ -217,6 +75,19 @@ trainingDataInput.addEventListener('change', async (e) => {
   console.log('文件选择事件触发');
   try {
     const files = Array.from(e.target.files);
+    
+    // 查找标注文件（应该是一个JSON文件）
+    const annotationFile = files.find(file => file.name === 'annotations.json');
+    if (!annotationFile) {
+      alert('请选择包含 annotations.json 标注文件的文件夹');
+      return;
+    }
+
+    // 读取标注文件
+    const annotations = await loadAnnotations(annotationFile);
+    console.log('加载到标注数据:', annotations);
+
+    // 过滤出图片文件
     const imageFiles = files.filter(file => 
       file.type.startsWith('image/')
     );
@@ -227,7 +98,7 @@ trainingDataInput.addEventListener('change', async (e) => {
     }
 
     console.log(`找到 ${imageFiles.length} 个图片文件`);
-    datasetCount.textContent = '正在加载...';
+    datasetCount.textContent = '正在加载数据集...';
     startTrainBtn.disabled = true;
 
     // 清空现有数据
@@ -242,12 +113,26 @@ trainingDataInput.addEventListener('change', async (e) => {
       // 处理这一批的图片
       for (const file of batch) {
         try {
-          const {tensor, box} = await preprocessImage(file);
+          // 查找对应的标注数据
+          const annotation = annotations.images.find(img => img.file_name === file.name);
+          if (!annotation) {
+            console.warn(`未找到图片 ${file.name} 的标注数据，跳过`);
+            continue;
+          }
+
+          // 处理图片
+          const tensor = await preprocessImage(file);
           trainingData.images.push(tensor);
-          trainingData.labels.push(box);
+          // 使用标注数据中的坐标
+          trainingData.labels.push([
+            annotation.annotations.x,
+            annotation.annotations.y,
+            annotation.annotations.width,
+            annotation.annotations.height
+          ]);
           
           // 更新进度
-          datasetCount.textContent = `已加载: ${trainingData.images.length}/${imageFiles.length}张图片`;
+          datasetCount.textContent = `已加载 ${trainingData.images.length} 个样本，共 ${imageFiles.length} 个`;
         } catch (err) {
           console.warn(`处理文件 ${file.name} 时出错:`, err);
         }
@@ -266,7 +151,7 @@ trainingDataInput.addEventListener('change', async (e) => {
         标签示例: trainingData.labels[0]
       });
     } else {
-      alert('没有成功加载任何训练数据，请检查图片是否包含有效的标记框');
+      alert('没有成功加载任何训练数据，请确保图片文件名与标注数据匹配');
     }
 
   } catch (err) {
@@ -274,6 +159,81 @@ trainingDataInput.addEventListener('change', async (e) => {
     alert('加载数据集时出错，请检查控制台获取详细信息');
   }
 });
+
+// 图片预处理函数
+async function preprocessImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = async () => {
+      try {
+        // 创建canvas用于图片处理
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // 保持原始宽高比的情况下调整尺寸
+        const maxSize = 224;
+        let targetWidth, targetHeight;
+        
+        if (img.width > img.height) {
+          targetWidth = maxSize;
+          targetHeight = Math.round((maxSize * img.height) / img.width);
+        } else {
+          targetHeight = maxSize;
+          targetWidth = Math.round((maxSize * img.width) / img.height);
+        }
+        
+        // 设置canvas尺寸为目标尺寸
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        
+        // 绘制调整后的图片
+        ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+        
+        // 创建填充后的张量
+        const tensor = tf.tidy(() => {
+          // 首先将图像转换为张量
+          const imageTensor = tf.browser.fromPixels(canvas)
+            .toFloat()
+            .div(255.0);
+          
+          // 创建填充张量
+          const paddedTensor = tf.zeros([224, 224, 3]);
+          
+          // 计算填充位置
+          const offsetX = Math.floor((224 - targetWidth) / 2);
+          const offsetY = Math.floor((224 - targetHeight) / 2);
+          
+          // 将图像张量放置在填充张量的中心
+          return tf.tidy(() => {
+            // 创建一个完整的224x224x3的零张量
+            const fullTensor = tf.zeros([224, 224, 3]);
+            
+            // 使用tf.slice和tf.add来将图像放在中心位置
+            const updates = fullTensor.bufferSync();
+            const imageBuffer = imageTensor.bufferSync();
+            
+            // 复制图像数据到中心位置
+            for (let y = 0; y < targetHeight; y++) {
+              for (let x = 0; x < targetWidth; x++) {
+                for (let c = 0; c < 3; c++) {
+                  updates.set(imageBuffer.get(y, x, c), y + offsetY, x + offsetX, c);
+                }
+              }
+            }
+            
+            return tf.tensor(updates.values, [1, 224, 224, 3]);
+          });
+        });
+        
+        resolve(tensor);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
 
 // 创建模型
 function createModel() {
@@ -311,7 +271,7 @@ startTrainBtn.addEventListener('click', async () => {
     model = createModel();
   }
   
-  const optimizer = tf.train.adam(learningRateInput.value);
+  const optimizer = tf.train.adam(0.001);
   model.compile({
     optimizer: optimizer,
     loss: 'meanSquaredError',
@@ -325,7 +285,7 @@ startTrainBtn.addEventListener('click', async () => {
   try {
     // 使用更小的批次大小和更少的训练轮数
     const trainBatchSize = 1; // 单个样本训练
-    const totalEpochs = Math.min(parseInt(epochsInput.value), 10); // 限制最大训练轮数
+    const totalEpochs = 10; // 限制最大训练轮数
     
     // 清空图表数据
     chart.data.labels = [];
@@ -355,8 +315,10 @@ startTrainBtn.addEventListener('click', async () => {
           const result = await model.trainOnBatch(xs, ys);
           const loss = Array.isArray(result) ? result[0] : result;
           
-          // 计算准确率（基于预测值和实际值的接近程度）
+          // 计算准确率
           const prediction = model.predict(xs);
+          const predictedBox = prediction.dataSync();
+          
           const accuracy = await tf.tidy(() => {
             // 计算预测值与真实值的欧氏距离
             const diff = prediction.sub(ys);
@@ -427,26 +389,58 @@ stopTrainBtn.addEventListener('click', () => {
 
 // 导出模型
 exportModelBtn.addEventListener('click', async () => {
-  if (model) {
-    await model.save('downloads://nfc-detector-model');
+  if (!model) {
+    alert('请先训练模型');
+    return;
   }
-});
 
-// 重置训练状态
-function resetTraining() {
-  isTraining = false;
-  model = null;
-  trainingData = [];
-  datasetCount.textContent = '0';
-  currentEpoch.textContent = '0/0';
-  trainLoss.textContent = '-';
-  valAccuracy.textContent = '-';
-  startTrainBtn.disabled = true;
-  stopTrainBtn.disabled = true;
-  exportModelBtn.disabled = true;
-  
-  chart.data.labels = [];
-  chart.data.datasets[0].data = [];
-  chart.data.datasets[1].data = [];
-  chart.update();
-} 
+  try {
+    // 创建一个 JSZip 实例
+    const zip = new JSZip();
+    
+    // 保存模型架构和权重
+    const modelSave = await model.save(tf.io.withSaveHandler(async (modelArtifacts) => {
+      // 确保包含权重规格
+      const weightSpecs = model.weights.map(weight => ({
+        name: weight.name,
+        shape: weight.shape,
+        dtype: weight.dtype
+      }));
+      
+      // 构建完整的模型拓扑
+      const fullModelTopology = {
+        ...modelArtifacts.modelTopology,
+        weightsManifest: [{
+          paths: ['nfc-detector-model.weights.bin'],
+          weights: weightSpecs
+        }]
+      };
+      
+      // 保存完整的模型架构
+      zip.file("model.json", JSON.stringify(fullModelTopology));
+      
+      // 保存权重
+      const weightData = modelArtifacts.weightData;
+      const weightBlob = new Blob([weightData], {type: 'application/octet-stream'});
+      zip.file("nfc-detector-model.weights.bin", weightBlob);
+      
+      return modelArtifacts;
+    }));
+
+    // 生成并下载 zip 文件
+    const content = await zip.generateAsync({type: "blob"});
+    const url = URL.createObjectURL(content);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'nfc-detector-model.zip';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    alert('模型导出成功！');
+  } catch (error) {
+    console.error('导出模型失败:', error);
+    alert('导出模型失败，请查看控制台了解详情');
+  }
+}); 

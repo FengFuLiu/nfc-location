@@ -11,6 +11,11 @@ let allResults = [];
 let totalFiles = 0;
 let processedFiles = 0;
 let unmatchedImages = [];
+let nfcModel = null;
+const modelUpload = document.getElementById('modelUpload');
+const uploadModelBtn = document.getElementById('uploadModelBtn');
+const modelStatus = document.getElementById('modelStatus');
+const detectionModeInputs = document.getElementsByName('detectionMode');
 
 // 文件夹上传的处理函数
 folderInput.addEventListener('change', async function (e) {
@@ -72,74 +77,80 @@ function buildModelName(filePath) {
 async function processFile(file) {
     return new Promise((resolve) => {
         const reader = new FileReader();
-        reader.onload = function(event) {
+        reader.onload = async function(event) {
             const img = new Image();
-            img.onload = function() {
-                const result = processImage(img);
-
-                if (result) {
-                    const pathParts = file.webkitRelativePath.split('/').filter(part => part);
-                    let model = 'UNKNOWN';
-                    let brand = 'UNKNOWN';
+            img.onload = async function() {
+                try {
+                    const result = await processImage(img);
                     
-                    if (pathParts.length >= 2) {
-                        model = pathParts[pathParts.length - 2];
-                        if (pathParts.length >= 3) {
-                            brand = pathParts[pathParts.length - 3];
+                    if (result && result.nfcLocation) {
+                        const pathParts = file.webkitRelativePath.split('/').filter(part => part);
+                        let model = 'UNKNOWN';
+                        let brand = 'UNKNOWN';
+                        
+                        if (pathParts.length >= 2) {
+                            model = pathParts[pathParts.length - 2];
+                            if (pathParts.length >= 3) {
+                                brand = pathParts[pathParts.length - 3];
+                            }
                         }
-                    }
 
-                    // 检查异常情况
-                    const isAbnormal = checkAbnormalResult(result.nfcLocation);
-                    if (isAbnormal) {
-                        // 如果是异常情况，只添加到未匹配列表，不添加到结果中
+                        // 检查异常情况
+                        const isAbnormal = checkAbnormalResult(result.nfcLocation);
+                        if (isAbnormal) {
+                            // 如果是异常情况，只添加到未匹配列表，不添加到结果中
+                            unmatchedImages.push({
+                                name: file.name,
+                                path: file.webkitRelativePath,
+                                reason: isAbnormal,
+                                data: result.nfcLocation,
+                                imageData: event.target.result
+                            });
+                        } else {
+                            // 只有正常的结果才添加到 JSON 中
+                            const resultObject = {
+                                device: {
+                                    brand: brand.toUpperCase(),
+                                    model: model.toUpperCase(),
+                                    width: result.nfcLocation.deviceWidth,
+                                    height: result.nfcLocation.deviceHeight
+                                },
+                                nfcLocation: {
+                                    top: result.nfcLocation.top,
+                                    left: result.nfcLocation.left,
+                                    width: result.nfcLocation.width,
+                                    height: result.nfcLocation.height
+                                }
+                            };
+                            allResults.push(resultObject);
+                        }
+                    } else {
+                        // 未检测到 NFC 区域的情况
                         unmatchedImages.push({
                             name: file.name,
                             path: file.webkitRelativePath,
-                            reason: isAbnormal,
-                            data: {
-                                deviceWidth: result.nfcLocation.deviceWidth,
-                                deviceHeight: result.nfcLocation.deviceHeight,
-                                nfcTop: result.nfcLocation.top,
-                                nfcLeft: result.nfcLocation.left,
-                                nfcWidth: result.nfcLocation.width,
-                                nfcHeight: result.nfcLocation.height
-                            },
+                            reason: '未检测到有效的NFC区域',
                             imageData: event.target.result
                         });
-                    } else {
-                        // 只有正常的结果才添加到 JSON 中
-                        const resultObject = {
-                            device: {
-                                brand: brand.toUpperCase(),
-                                model: model.toUpperCase(),
-                                width: result.nfcLocation.deviceWidth,
-                                height: result.nfcLocation.deviceHeight
-                            },
-                            nfcLocation: {
-                                top: result.nfcLocation.top,
-                                left: result.nfcLocation.left,
-                                width: result.nfcLocation.width,
-                                height: result.nfcLocation.height
-                            }
-                        };
-                        allResults.push(resultObject);
                     }
-                } else {
-                    // 未检测到 NFC 区域的情况
+
+                    // 更新显示
+                    updateResults(allResults);
+                    processedFiles++;
+                    updateProgress();
+                    resolve();
+                } catch (error) {
+                    console.error('处理图片失败:', error);
                     unmatchedImages.push({
                         name: file.name,
                         path: file.webkitRelativePath,
-                        reason: '未检测到有效的NFC区域',
+                        reason: '处理失败: ' + error.message,
                         imageData: event.target.result
                     });
+                    processedFiles++;
+                    updateProgress();
+                    resolve();
                 }
-
-                // 更新显示
-                updateResults(allResults);
-                processedFiles++;
-                updateProgress();
-                resolve();
             }
             img.src = event.target.result;
         }
@@ -279,8 +290,249 @@ function detectDeviceBounds(imageData, width, height) {
     };
 }
 
-// 处理图片
-function processImage(img) {
+// 监听检测模式变化
+detectionModeInputs.forEach(input => {
+    input.addEventListener('change', (e) => {
+        const modelUploadDiv = document.querySelector('.model-upload');
+        if (e.target.value === 'model') {
+            modelUploadDiv.style.display = 'block';
+        } else {
+            modelUploadDiv.style.display = 'none';
+        }
+    });
+});
+
+// 点击上传按钮时触发文件选择
+uploadModelBtn.addEventListener('click', () => {
+    modelUpload.click();
+});
+
+// 处理模型文件上传
+modelUpload.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+        modelStatus.textContent = '正在加载模型...';
+        console.log('开始加载模型文件...');
+        
+        if (file.name.endsWith('.zip')) {
+            // 处理 zip 文件
+            const zip = new JSZip();
+            console.log('解压模型文件...');
+            const zipContent = await zip.loadAsync(file);
+            
+            // 验证必要文件是否存在
+            if (!zipContent.file('model.json') || !zipContent.file('nfc-detector-model.weights.bin')) {
+                throw new Error('模型文件不完整，缺少必要的文件');
+            }
+            
+            // 读取 model.json
+            console.log('读取模型结构...');
+            const modelJSON = await zipContent.file('model.json').async('text');
+            const modelTopology = JSON.parse(modelJSON);
+            
+            // 验证模型结构
+            if (!modelTopology.weightsManifest) {
+                throw new Error('模型结构不完整，缺少权重清单');
+            }
+            
+            // 读取权重文件
+            console.log('读取模型权重...');
+            const weightData = await zipContent.file('nfc-detector-model.weights.bin').async('arraybuffer');
+            
+            // 构建完整的模型数据
+            console.log('构建模型数据...');
+            const modelArtifacts = {
+                modelTopology: modelTopology,
+                weightSpecs: modelTopology.weightsManifest[0].weights,
+                weightData: weightData,
+                format: 'layers-model',
+                generatedBy: 'TensorFlow.js',
+                convertedBy: null,
+                userDefinedMetadata: {}
+            };
+            
+            // 加载模型
+            console.log('加载模型到 TensorFlow.js...');
+            nfcModel = await tf.loadLayersModel(tf.io.fromMemory(modelArtifacts));
+            
+            console.log('模型加载成功！');
+            modelStatus.textContent = '模型加载成功';
+            uploadModelBtn.style.backgroundColor = 'var(--success-color)';
+        } else {
+            throw new Error('请上传 .zip 格式的模型文件');
+        }
+    } catch (error) {
+        console.error('加载模型失败:', error);
+        modelStatus.textContent = '模型加载失败: ' + error.message;
+        uploadModelBtn.style.backgroundColor = 'var(--error-color)';
+        nfcModel = null;
+    }
+});
+
+// 检查异常结果
+function checkAbnormalResult(nfcLocation) {
+    // 添加空值检查
+    if (!nfcLocation) {
+        return '未检测到NFC区域';
+    }
+
+    const {
+        top,
+        left,
+        width,
+        height,
+        deviceWidth,
+        deviceHeight
+    } = nfcLocation;
+
+    // 检查必要的属性是否都存在
+    if (top === undefined || left === undefined || 
+        width === undefined || height === undefined || 
+        deviceWidth === undefined || deviceHeight === undefined) {
+        return 'NFC位置数据不完整';
+    }
+
+    // 检查设备尺寸是否异常（可能是部分图片）
+    const normalAspectRatioMin = 0.4;
+    const normalAspectRatioMax = 0.65;
+    const currentAspectRatio = deviceWidth / deviceHeight;
+
+    if (currentAspectRatio < normalAspectRatioMin || currentAspectRatio > normalAspectRatioMax) {
+        return '设备宽高比异常';
+    }
+
+    // 检查 NFC 区域大小是否合理
+    const nfcAreaRatio = (width * height) / (deviceWidth * deviceHeight);
+    if (nfcAreaRatio > 0.3) {
+        return 'NFC区域过大';
+    }
+
+    // 检查 NFC 区域的位置是否在合理范围内
+    if (top < 0 || left < 0 || top + height > deviceHeight || left + width > deviceWidth) {
+        return 'NFC区域位置异常';
+    }
+
+    return null;
+}
+
+// 修改处理图片的函数，确保返回正确的格式
+async function processImage(img) {
+    let tensor = null;
+    // 获取当前选择的检测模式
+    const detectionMode = document.querySelector('input[name="detectionMode"]:checked').value;
+    
+    if (detectionMode === 'traditional') {
+        // 使用原有的图像处理方式
+        return processTraditionalMode(img);
+    } else {
+        // 使用模型检测
+        if (!nfcModel) {
+            throw new Error('请先加载模型');
+        }
+
+        try {
+            // 预处理图像
+            tensor = tf.tidy(() => {
+                // 1. 转换为张量
+                let imageTensor = tf.browser.fromPixels(img);
+                
+                // 2. 标准化尺寸
+                imageTensor = tf.image.resizeBilinear(imageTensor, [224, 224]);
+                
+                // 3. 数据归一化
+                imageTensor = imageTensor.toFloat().div(255.0);
+                
+                // 4. 对比度增强
+                const factor = 2;
+                const mean = imageTensor.mean();
+                imageTensor = imageTensor.sub(mean).mul(factor).add(mean);
+                imageTensor = tf.clipByValue(imageTensor, 0, 1);
+                
+                // 5. 扩展维度
+                imageTensor = imageTensor.expandDims();
+                
+                return imageTensor;
+            });
+
+            // 使用模型进行多次预测并取平均值
+            const numPredictions = 3;
+            let predictions = [];
+            
+            for (let i = 0; i < numPredictions; i++) {
+                const pred = await nfcModel.predict(tensor).array();
+                if (!pred || !pred[0] || pred[0].length !== 4) {
+                    throw new Error('模型预测结果格式不正确');
+                }
+                predictions.push(pred[0]);
+            }
+
+            // 计算平均预测值
+            const avgPrediction = predictions.reduce((acc, curr) => {
+                return curr.map((val, idx) => acc[idx] + val / numPredictions);
+            }, [0, 0, 0, 0]);
+
+            const [x, y, width, height] = avgPrediction;
+
+            // 在画布上显示检测结果
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            
+            // 将归一化坐标转换为实际像素坐标，并添加置信度检查
+            const actualX = Math.max(0, Math.min(x * img.width, img.width));
+            const actualY = Math.max(0, Math.min(y * img.height, img.height));
+            const actualWidth = Math.max(10, Math.min(width * img.width, img.width - actualX));  // 最小宽度10像素
+            const actualHeight = Math.max(10, Math.min(height * img.height, img.height - actualY)); // 最小高度10像素
+
+            // 计算预测框的面积比例
+            const areaRatio = (actualWidth * actualHeight) / (img.width * img.height);
+            if (areaRatio > 0.5 || areaRatio < 0.001) {
+                console.log('预测框面积比例异常:', areaRatio);
+                return null;
+            }
+
+            // 绘制检测框
+            ctx.strokeStyle = '#00FF00';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(actualX, actualY, actualWidth, actualHeight);
+
+            // 添加预测框的标注
+            ctx.fillStyle = 'rgba(0, 255, 0, 0.3)';
+            ctx.fillRect(actualX, actualY, actualWidth, actualHeight);
+            
+            // 显示预测置信度
+            ctx.fillStyle = '#00FF00';
+            ctx.font = '14px Arial';
+            ctx.fillText(`NFC区域 (${Math.round(areaRatio * 100)}%)`, actualX, actualY - 5);
+
+            // 返回检测结果
+            return {
+                nfcLocation: {
+                    top: actualY,
+                    left: actualX,
+                    width: actualWidth,
+                    height: actualHeight,
+                    deviceWidth: img.width,
+                    deviceHeight: img.height,
+                    confidence: areaRatio
+                }
+            };
+        } catch (error) {
+            console.error('模型预测失败:', error);
+            return null;
+        } finally {
+            // 清理内存
+            if (tensor) {
+                tensor.dispose();
+            }
+        }
+    }
+}
+
+// 传统模式处理函数
+function processTraditionalMode(img) {
     canvas.width = img.width;
     canvas.height = img.height;
     ctx.drawImage(img, 0, 0);
@@ -290,7 +542,7 @@ function processImage(img) {
     const deviceBounds = detectDeviceBounds(imageData, canvas.width, canvas.height);
     
     // 在原图上标记设备边界
-    ctx.strokeStyle = '#00FF00';  // 使用绿色
+    ctx.strokeStyle = '#00FF00';
     ctx.lineWidth = 2;
     ctx.strokeRect(deviceBounds.x, deviceBounds.y, deviceBounds.width, deviceBounds.height);
 
@@ -460,40 +712,6 @@ copyBtn.addEventListener('click', async function () {
         }
     }
 });
-
-// 检查异常结果
-function checkAbnormalResult(nfcLocation) {
-    const {
-        top,
-        left,
-        width,
-        height,
-        deviceWidth,
-        deviceHeight
-    } = nfcLocation;
-
-    // 检查设备尺寸是否异常（可能是部分图片）
-    const normalAspectRatioMin = 0.4;
-    const normalAspectRatioMax = 0.65;
-    const currentAspectRatio = deviceWidth / deviceHeight;
-
-    if (currentAspectRatio < normalAspectRatioMin || currentAspectRatio > normalAspectRatioMax) {
-        return '设备宽高比异常';
-    }
-
-    // 检查 NFC 区域大小是否合理
-    const nfcAreaRatio = (width * height) / (deviceWidth * deviceHeight);
-    if (nfcAreaRatio > 0.3) {
-        return 'NFC区域过大';
-    }
-
-    // 检查 NFC 区域的位置是否在合理范围内
-    if (top < 0 || left < 0 || top + height > deviceHeight || left + width > deviceWidth) {
-        return 'NFC区域位置异常';
-    }
-
-    return null;
-}
 
 // 显示未匹配图片
 function showUnmatchedSummary() {
