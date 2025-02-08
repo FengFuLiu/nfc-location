@@ -25,7 +25,7 @@
       <div class="tab-container">
         <div class="tab-buttons">
           <button class="tab-button" data-tab="mark">手动标记</button>
-          <button class="tab-button active" data-tab="detect">批量检测</button>
+          <button class="tab-button" data-tab="detect">批量检测</button>
           <button class="tab-button" data-tab="annotate">标注工具</button>
           <button class="tab-button" data-tab="train">模型训练</button>
         </div>
@@ -68,7 +68,7 @@
       </div>
 
       <!-- 检测功能的内容 -->
-      <div id="detectTab" class="tab-content active">
+      <div id="detectTab" class="tab-content">
         <p>批量检测功能可以自动分析多个手机图片中的NFC位置：</p>
         <ul style="margin: 10px 0 20px 20px; color: var(--text-secondary);">
           <li>支持批量上传多个品牌和型号的手机图片</li>
@@ -283,7 +283,7 @@
     <div class="instructions">
       <h2>使用说明</h2>
       <!-- 手动标记的使用说明 -->
-      <div class="instruction-content active" id="markInstructions">
+      <div class="instruction-content" id="markInstructions">
         <ol>
           <li>输入手机品牌和型号（例如：APPLE IPHONE15）</li>
           <li>调整手机屏幕比例（默认9:19.5）</li>
@@ -303,43 +303,91 @@
       <!-- 批量检测的使用说明 -->
       <div class="instruction-content" id="detectInstructions">
         <ol>
-          <li>选择包含手机图片的文件夹进行上传</li>
-          <li>文件夹结构应为：品牌/型号/图片文件</li>
-          <li>支持的图片格式：PNG、JPG、JPEG</li>
-          <li>图片应清晰显示手机正面，且NFC区域需要用红色框标记</li>
-          <li>处理完成后可以：
+          <li>选择检测模式：
             <ul>
-              <li>下载JSON结果</li>
+              <li>传统模式：基于图像处理算法检测</li>
+              <li>AI模式：使用训练好的模型检测（需要先上传模型文件）</li>
+            </ul>
+          </li>
+          <li>选择包含手机图片的文件夹进行上传
+            <ul>
+              <li>文件夹结构应为：品牌/型号/图片文件</li>
+              <li>支持的图片格式：PNG、JPG、JPEG</li>
+              <li>图片应清晰显示手机正面</li>
+            </ul>
+          </li>
+          <li>等待检测完成，查看结果：
+            <ul>
+              <li>下载JSON结果文件</li>
               <li>复制结果到剪贴板</li>
-              <li>查看异常检测结果详情</li>
+              <li>查看检测详情和错误信息</li>
             </ul>
           </li>
         </ol>
       </div>
-      
+
+      <!-- 标注工具的使用说明 -->
+      <div class="instruction-content" id="annotateInstructions">
+        <ol>
+          <li>选择图片文件夹：
+            <ul>
+              <li>点击"选择图片文件夹"按钮</li>
+              <li>选择包含需要标注的手机图片的文件夹</li>
+              <li>支持批量导入多张图片</li>
+            </ul>
+          </li>
+          <li>标注操作：
+            <ul>
+              <li>在图片上按住鼠标左键拖动，框选NFC区域</li>
+              <li>绿色框表示当前选择的区域</li>
+              <li>右侧实时显示标注信息</li>
+            </ul>
+          </li>
+          <li>图片导航：
+            <ul>
+              <li>使用"上一张"和"下一张"按钮切换图片</li>
+              <li>顶部显示当前进度（例如：1/10）</li>
+            </ul>
+          </li>
+          <li>标注管理：
+            <ul>
+              <li>点击"重置框选"可以重新标注当前图片</li>
+              <li>完成所有标注后点击"生成数据集"</li>
+              <li>将自动打包图片和标注信息为ZIP文件</li>
+            </ul>
+          </li>
+        </ol>
+      </div>
+
       <!-- 模型训练的使用说明 -->
       <div class="instruction-content" id="trainInstructions">
         <ol>
-          <li>准备训练数据集：
+          <li>准备训练数据：
             <ul>
-              <li>按品牌/型号整理图片文件夹</li>
-              <li>确保图片中NFC区域已标记（红框）</li>
-              <li>建议至少准备100张样本</li>
+              <li>使用标注工具生成的数据集</li>
+              <li>确保数据集包含足够的样本（建议>100张）</li>
+              <li>图片应该具有代表性和多样性</li>
             </ul>
           </li>
-          <li>上传数据集文件夹</li>
-          <li>配置训练参数：
+          <li>上传数据集：
             <ul>
-              <li>训练轮数：建议50-100轮</li>
-              <li>批次大小：根据设备性能调整</li>
-              <li>学习率：建议从0.001开始</li>
+              <li>选择包含已标注图片的ZIP文件</li>
+              <li>系统会自动验证数据集格式</li>
+              <li>显示可用的训练样本数量</li>
             </ul>
           </li>
-          <li>点击"开始训练"，观察训练进度</li>
-          <li>训练完成后可以：
+          <li>训练过程：
             <ul>
-              <li>导出训练好的模型</li>
-              <li>在检测功能中使用模型</li>
+              <li>点击"开始训练"启动训练</li>
+              <li>实时显示训练进度和指标</li>
+              <li>可以随时暂停或停止训练</li>
+            </ul>
+          </li>
+          <li>模型导出：
+            <ul>
+              <li>训练完成后可导出模型</li>
+              <li>导出的模型可用于批量检测</li>
+              <li>包含模型文件和配置信息</li>
             </ul>
           </li>
         </ol>
@@ -350,88 +398,33 @@
   <!-- 引入必要的库 -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  
-  <!-- 初始化全局变量 -->
-  <script>
-    // 训练相关的全局变量
-    window.model = null;
-    window.isTraining = false;
-    window.trainingData = {
-      images: [],
-      labels: []
-    };
-  </script>
-
-  <!-- 引入训练脚本 -->
-  <script src="train.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="tabs.js"></script>
+  <script src="mark.js"></script>
+  <script src="detect.js"></script>
   <script src="annotate.js"></script>
+  <script src="train.js"></script>
 
   <script>
-    // Tab切换功能
-    const tabButtons = document.querySelectorAll('.tab-button');
-    const tabContents = document.querySelectorAll('.tab-content');
-    const instructionContents = document.querySelectorAll('.instruction-content');
+    // 初始化主题
+    function initTheme() {
+      const savedTheme = localStorage.getItem('theme') || 'light';
+      const body = document.documentElement;
+      const lightIcon = document.querySelector('.light-icon');
+      const darkIcon = document.querySelector('.dark-icon');
+      const themeText = document.querySelector('.theme-text');
 
-    tabButtons.forEach(button => {
-      button.addEventListener('click', () => {
-        // 移除所有active类
-        tabButtons.forEach(btn => btn.classList.remove('active'));
-        tabContents.forEach(content => content.classList.remove('active'));
-        instructionContents.forEach(content => content.classList.remove('active'));
-
-        // 添加active类到当前选中的tab
-        button.classList.add('active');
-        const tabId = button.getAttribute('data-tab');
-        document.getElementById(tabId + 'Tab').classList.add('active');
-        
-        // 检查说明元素是否存在
-        const instructionElement = document.getElementById(tabId + 'Instructions');
-        if (instructionElement) {
-            instructionElement.classList.add('active');
-        }
-
-        // 重置两个tab的状态
-        if (tabId === 'detect') {
-          // 重置检测tab的状态
-          if (typeof resetDetectTab === 'function') {
-            resetDetectTab();
-          }
-        } else {
-          // 重置标记tab的状态
-          if (typeof resetMarker === 'function') {
-            resetMarker();
-          }
-        }
-      });
-    });
-
-    // 防止两个tab的功能互相干扰
-    function resetDetectTab() {
-      // 重置检测相关的变量和显示
-      if (typeof allResults !== 'undefined') {
-        allResults = [];
-        unmatchedImages = [];
-        totalFiles = 0;
-        processedFiles = 0;
-        updateResults(allResults);
-        updateProgress();
-
-        const oldSummary = document.querySelector('.summary');
-        if (oldSummary) {
-          oldSummary.remove();
-        }
+      if (savedTheme === 'dark') {
+        body.setAttribute('data-theme', 'dark');
+        lightIcon.style.display = 'block';
+        darkIcon.style.display = 'none';
+        themeText.textContent = '浅色模式';
+      } else {
+        lightIcon.style.display = 'none';
+        darkIcon.style.display = 'block';
+        themeText.textContent = '深色模式';
       }
     }
-
-    // 确保两个tab的脚本不会命名冲突
-    const detectScript = document.createElement('script');
-    detectScript.src = 'detect.js';  // 将原 index.html 的脚本部分移到这个文件
-    document.body.appendChild(detectScript);
-
-    const markScript = document.createElement('script');
-    markScript.src = 'mark.js';  // 将原 mark.html 的脚本部分移到这个文件
-    document.body.appendChild(markScript);
 
     // 主题切换功能
     function toggleTheme() {
@@ -457,28 +450,39 @@
       }
     }
 
-    // 初始化主题
-    function initTheme() {
-      const savedTheme = localStorage.getItem('theme') || 'light';
-      const body = document.documentElement;
-      const lightIcon = document.querySelector('.light-icon');
-      const darkIcon = document.querySelector('.dark-icon');
-      const themeText = document.querySelector('.theme-text');
+    // 页面加载时初始化
+    document.addEventListener('DOMContentLoaded', () => {
+      initTheme();
+      
+      // 从URL获取当前tab
+      const urlParams = new URLSearchParams(window.location.search);
+      const currentTab = urlParams.get('tab') || 'mark';
+      
+      // 更新说明内容
+      const instructionContents = document.querySelectorAll('.instruction-content');
+      instructionContents.forEach(content => {
+        content.classList.remove('active');
+        if (content.id === currentTab + 'Instructions') {
+          content.classList.add('active');
+        }
+      });
 
-      if (savedTheme === 'dark') {
-        body.setAttribute('data-theme', 'dark');
-        lightIcon.style.display = 'block';
-        darkIcon.style.display = 'none';
-        themeText.textContent = '浅色模式';
-      } else {
-        lightIcon.style.display = 'none';
-        darkIcon.style.display = 'block';
-        themeText.textContent = '深色模式';
-      }
-    }
-
-    // 页面加载时初始化主题
-    document.addEventListener('DOMContentLoaded', initTheme);
+      // 添加tab切换事件监听
+      const tabButtons = document.querySelectorAll('.tab-button');
+      tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+          const tabId = button.getAttribute('data-tab');
+          
+          // 更新说明内容
+          instructionContents.forEach(content => {
+            content.classList.remove('active');
+            if (content.id === tabId + 'Instructions') {
+              content.classList.add('active');
+            }
+          });
+        });
+      });
+    });
   </script>
 </body>
 
