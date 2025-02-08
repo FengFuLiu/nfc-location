@@ -17,6 +17,21 @@ const uploadModelBtn = document.getElementById('uploadModelBtn');
 const modelStatus = document.getElementById('modelStatus');
 const detectionModeInputs = document.getElementsByName('detectionMode');
 
+// 添加新的DOM元素引用
+const imageListContainer = document.createElement('div');
+imageListContainer.className = 'image-list-container';
+const paginationContainer = document.createElement('div');
+paginationContainer.className = 'pagination-container';
+
+// 将新元素添加到页面
+resultsDiv.parentNode.insertBefore(imageListContainer, resultsDiv);
+resultsDiv.parentNode.insertBefore(paginationContainer, resultsDiv);
+
+// 图片列表相关变量
+let currentPage = 1;
+const imagesPerPage = 9;
+let processedImagesList = [];
+
 // 文件夹上传的处理函数
 folderInput.addEventListener('change', async function (e) {
     const files = Array.from(e.target.files).filter(file =>
@@ -83,6 +98,14 @@ async function processFile(file) {
                 try {
                     const result = await processImage(img);
                     
+                    // 将处理结果添加到图片列表
+                    processedImagesList.push({
+                        name: file.name,
+                        path: file.webkitRelativePath,
+                        imageUrl: event.target.result,
+                        result: result
+                    });
+                    
                     if (result && result.nfcLocation) {
                         const pathParts = file.webkitRelativePath.split('/').filter(part => part);
                         let model = 'UNKNOWN';
@@ -98,7 +121,6 @@ async function processFile(file) {
                         // 检查异常情况
                         const isAbnormal = checkAbnormalResult(result.nfcLocation);
                         if (isAbnormal) {
-                            // 如果是异常情况，只添加到未匹配列表，不添加到结果中
                             unmatchedImages.push({
                                 name: file.name,
                                 path: file.webkitRelativePath,
@@ -107,7 +129,6 @@ async function processFile(file) {
                                 imageData: event.target.result
                             });
                         } else {
-                            // 只有正常的结果才添加到 JSON 中
                             const resultObject = {
                                 device: {
                                     brand: brand.toUpperCase(),
@@ -134,18 +155,18 @@ async function processFile(file) {
                         });
                     }
 
-                    // 更新显示
-                    updateResults(allResults);
+                    // 更新进度和显示
                     processedFiles++;
                     updateProgress();
+                    updateResults(allResults);
                     resolve();
                 } catch (error) {
                     console.error('处理图片失败:', error);
-                    unmatchedImages.push({
+                    processedImagesList.push({
                         name: file.name,
                         path: file.webkitRelativePath,
-                        reason: '处理失败: ' + error.message,
-                        imageData: event.target.result
+                        imageUrl: event.target.result,
+                        error: error.message
                     });
                     processedFiles++;
                     updateProgress();
@@ -541,11 +562,6 @@ function processTraditionalMode(img) {
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const deviceBounds = detectDeviceBounds(imageData, canvas.width, canvas.height);
     
-    // 在原图上标记设备边界
-    ctx.strokeStyle = '#00FF00';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(deviceBounds.x, deviceBounds.y, deviceBounds.width, deviceBounds.height);
-
     // 获取裁剪后的设备区域的图像数据
     const deviceImageData = ctx.getImageData(
         deviceBounds.x, 
@@ -555,7 +571,22 @@ function processTraditionalMode(img) {
     );
 
     // 使用检测到的设备尺寸和裁剪后的图像数据
-    return detectRedRectangle(deviceImageData, deviceBounds.width, deviceBounds.height);
+    const nfcResult = detectRedRectangle(deviceImageData, deviceBounds.width, deviceBounds.height);
+    
+    if (nfcResult && nfcResult.nfcLocation) {
+        // 调整NFC区域坐标，使其相对于设备边界
+        nfcResult.nfcLocation.left += deviceBounds.x;
+        nfcResult.nfcLocation.top += deviceBounds.y;
+        nfcResult.nfcLocation.deviceWidth = deviceBounds.width;
+        nfcResult.nfcLocation.deviceHeight = deviceBounds.height;
+    }
+
+    // 在原图上标记设备边界
+    ctx.strokeStyle = '#00FF00';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(deviceBounds.x, deviceBounds.y, deviceBounds.width, deviceBounds.height);
+
+    return nfcResult;
 }
 
 function detectRedRectangle(deviceImageData, deviceWidth, deviceHeight) {
@@ -652,19 +683,159 @@ function detectColorRegion(deviceImageData, deviceWidth, deviceHeight, colorCond
     return null;
 }
 
-// 显示结果
+// 更新显示结果的函数
 function updateResults(results) {
-    const formattedJson = JSON.stringify(results, null, 2);
-    resultsDiv.textContent = formattedJson;
-
+    console.log('更新结果:', results); // 添加调试日志
+    
     // 如果有结果，显示复制和下载按钮
     if (results && results.length > 0) {
         copyBtn.style.display = 'block';
         downloadBtn.style.display = 'block';
+        // 在 resultsDiv 中显示格式化的 JSON
+        resultsDiv.textContent = JSON.stringify(results, null, 2);
     } else {
         copyBtn.style.display = 'none';
         downloadBtn.style.display = 'none';
+        resultsDiv.textContent = '暂无结果';
     }
+
+    // 更新图片列表
+    updateImageList();
+}
+
+// 更新图片列表显示
+function updateImageList() {
+    const startIndex = (currentPage - 1) * imagesPerPage;
+    const endIndex = startIndex + imagesPerPage;
+    const currentImages = processedImagesList.slice(startIndex, endIndex);
+
+    // 清空当前显示
+    imageListContainer.innerHTML = '';
+
+    // 创建图片网格
+    const gridContainer = document.createElement('div');
+    gridContainer.className = 'image-grid';
+    
+    // 添加每张图片
+    currentImages.forEach((imageData, index) => {
+        const imageCard = document.createElement('div');
+        imageCard.className = 'image-card';
+        
+        // 创建画布显示图片和检测结果
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // 加载图片
+        const img = new Image();
+        img.onload = () => {
+            // 计算合适的画布尺寸，保持原始比例
+            const maxSize = 200;
+            let targetWidth, targetHeight;
+            let scale;
+            
+            if (img.width > img.height) {
+                targetWidth = maxSize;
+                scale = maxSize / img.width;
+                targetHeight = Math.round(img.height * scale);
+            } else {
+                targetHeight = maxSize;
+                scale = maxSize / img.height;
+                targetWidth = Math.round(img.width * scale);
+            }
+            
+            // 设置画布尺寸
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+            
+            // 清除画布
+            ctx.clearRect(0, 0, targetWidth, targetHeight);
+            
+            // 绘制图片
+            ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+            
+            // 如果有NFC位置信息，绘制检测框
+            if (imageData.result && imageData.result.nfcLocation) {
+                const nfc = imageData.result.nfcLocation;
+                
+                // 绘制设备边界（绿色）
+                ctx.strokeStyle = '#00FF00';
+                ctx.lineWidth = 2;
+                // 计算设备边界的实际位置（去除留白）
+                const deviceBounds = detectDeviceBounds(
+                    ctx.getImageData(0, 0, targetWidth, targetHeight),
+                    targetWidth,
+                    targetHeight
+                );
+                ctx.strokeRect(
+                    deviceBounds.x,
+                    deviceBounds.y,
+                    deviceBounds.width,
+                    deviceBounds.height
+                );
+                
+                // 根据缩放比例调整NFC区域的坐标和尺寸
+                const scaledLeft = Math.round(nfc.left * scale);
+                const scaledTop = Math.round(nfc.top * scale);
+                const scaledWidth = Math.round(nfc.width * scale);
+                const scaledHeight = Math.round(nfc.height * scale);
+                
+                // 绘制NFC区域（蓝色）
+                ctx.strokeStyle = '#0000FF';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(scaledLeft, scaledTop, scaledWidth, scaledHeight);
+                
+                // 添加图例说明
+                ctx.font = '12px Arial';
+                ctx.fillStyle = '#00FF00';
+                ctx.fillText('设备边界', 5, 15);
+                ctx.fillStyle = '#0000FF';
+                ctx.fillText('NFC区域', 5, 30);
+            }
+        };
+        img.src = imageData.imageUrl;
+        
+        // 添加图片信息
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'image-info';
+        infoDiv.innerHTML = `
+            <p>文件名: ${imageData.name}</p>
+            ${imageData.result ? 
+                `<p>检测状态: 成功</p>
+                 <p>设备尺寸: ${imageData.result.nfcLocation.deviceWidth} x ${imageData.result.nfcLocation.deviceHeight}</p>
+                 <p>NFC位置: (${Math.round(imageData.result.nfcLocation.left)}, ${Math.round(imageData.result.nfcLocation.top)})</p>
+                 <p>NFC尺寸: ${Math.round(imageData.result.nfcLocation.width)} x ${Math.round(imageData.result.nfcLocation.height)}</p>` : 
+                `<p class="error">检测状态: 失败</p>`
+            }
+        `;
+        
+        imageCard.appendChild(canvas);
+        imageCard.appendChild(infoDiv);
+        gridContainer.appendChild(imageCard);
+    });
+    
+    imageListContainer.appendChild(gridContainer);
+    
+    // 更新分页
+    updatePagination();
+}
+
+// 更新分页控件
+function updatePagination() {
+    const totalPages = Math.ceil(processedImagesList.length / imagesPerPage);
+    
+    paginationContainer.innerHTML = `
+        <button ${currentPage === 1 ? 'disabled' : ''} onclick="changePage(1)">首页</button>
+        <button ${currentPage === 1 ? 'disabled' : ''} onclick="changePage(${currentPage - 1})">上一页</button>
+        <span>第 ${currentPage}/${totalPages} 页</span>
+        <button ${currentPage === totalPages ? 'disabled' : ''} onclick="changePage(${currentPage + 1})">下一页</button>
+        <button ${currentPage === totalPages ? 'disabled' : ''} onclick="changePage(${totalPages})">末页</button>
+    `;
+}
+
+// 切换页面
+function changePage(page) {
+    currentPage = page;
+    updateImageList();
 }
 
 // 复制功能
@@ -797,7 +968,7 @@ function showPreview(reason, index) {
     // 加载并显示图片
     const image = new Image();
     image.onload = function() {
-        // 设置canvas尺寸
+        // 设置canvas尺寸为原始图片尺寸
         previewCanvas.width = image.width;
         previewCanvas.height = image.height;
         previewCanvas.style.display = 'block';
@@ -808,20 +979,32 @@ function showPreview(reason, index) {
 
         // 如果有设备边界信息，绘制边界框
         if (img.data) {
+            // 检测设备实际边界
+            const deviceBounds = detectDeviceBounds(
+                ctx.getImageData(0, 0, image.width, image.height),
+                image.width,
+                image.height
+            );
+
             // 绘制设备边界（绿色）
             ctx.strokeStyle = '#00FF00';
             ctx.lineWidth = 2;
-            ctx.strokeRect(0, 0, img.data.deviceWidth, img.data.deviceHeight);
+            ctx.strokeRect(
+                deviceBounds.x,
+                deviceBounds.y,
+                deviceBounds.width,
+                deviceBounds.height
+            );
 
             // 绘制NFC区域（蓝色）
             ctx.strokeStyle = '#0000FF';
             ctx.lineWidth = 2;
-            ctx.strokeRect(
-                img.data.nfcLeft,
-                img.data.nfcTop,
-                img.data.nfcWidth,
-                img.data.nfcHeight
-            );
+            const nfcLeft = img.data.left || img.data.nfcLeft;
+            const nfcTop = img.data.top || img.data.nfcTop;
+            const nfcWidth = img.data.width || img.data.nfcWidth;
+            const nfcHeight = img.data.height || img.data.nfcHeight;
+            
+            ctx.strokeRect(nfcLeft, nfcTop, nfcWidth, nfcHeight);
 
             // 添加图例说明
             ctx.font = '14px Arial';

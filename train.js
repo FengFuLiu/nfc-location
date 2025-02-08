@@ -285,7 +285,7 @@ startTrainBtn.addEventListener('click', async () => {
   try {
     // 使用更小的批次大小和更少的训练轮数
     const trainBatchSize = 1; // 单个样本训练
-    const totalEpochs = 10; // 限制最大训练轮数
+    const totalEpochs = 50; // 限制最大训练轮数
     
     // 清空图表数据
     chart.data.labels = [];
