@@ -12,24 +12,54 @@ const valAccuracy = document.getElementById('valAccuracy');
 const DEBUG_MODE = {
   enabled: false,  // 默认关闭详细日志
   logs: [],       // 存储日志
+  maxSizeInBytes: 1024 * 1024, // 1MB 限制
+  currentSizeInBytes: 0,      // 当前日志大小
+  
   log: function(...args) {
     // 将日志转换为字符串并存储
     const logString = args.map(arg => 
       typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
     ).join(' ');
     
-    this.logs.push({
+    const logEntry = {
       timestamp: new Date().toISOString(),
       message: logString
-    });
+    };
+    
+    // 计算新日志条目的大小（以字节为单位）
+    const logSize = new TextEncoder().encode(JSON.stringify(logEntry)).length;
+    
+    // 如果添加新日志会超过大小限制，则移除最旧的日志直到有足够空间
+    while (this.currentSizeInBytes + logSize > this.maxSizeInBytes && this.logs.length > 0) {
+      const oldestLog = this.logs.shift();
+      this.currentSizeInBytes -= new TextEncoder().encode(JSON.stringify(oldestLog)).length;
+    }
+    
+    // 如果单条日志就超过了限制，则截断消息
+    if (logSize > this.maxSizeInBytes) {
+      logEntry.message = logEntry.message.substring(0, Math.floor(this.maxSizeInBytes / 2)) + 
+        "\n... [日志已截断，超出大小限制] ...";
+      const truncatedSize = new TextEncoder().encode(JSON.stringify(logEntry)).length;
+      if (truncatedSize <= this.maxSizeInBytes) {
+        this.logs.push(logEntry);
+        this.currentSizeInBytes = truncatedSize;
+      }
+    } else {
+      // 添加新日志
+      this.logs.push(logEntry);
+      this.currentSizeInBytes += logSize;
+    }
     
     if (this.enabled) {
       console.log(...args);
     }
   },
+  
   clearLogs: function() {
     this.logs = [];
+    this.currentSizeInBytes = 0;
   },
+  
   downloadLogs: function() {
     const logText = this.logs.map(log => 
       `[${log.timestamp}] ${log.message}`
