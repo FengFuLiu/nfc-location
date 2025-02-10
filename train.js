@@ -8,9 +8,66 @@ const currentEpoch = document.getElementById('currentEpoch');
 const trainLoss = document.getElementById('trainLoss');
 const valAccuracy = document.getElementById('valAccuracy');
 
-// 设置为使用 CPU 后端
-tf.setBackend('cpu');
-console.log('当前使用的后端:', tf.getBackend());
+// 添加日志控制开关
+const DEBUG_MODE = {
+  enabled: false,  // 默认关闭详细日志
+  logs: [],       // 存储日志
+  log: function(...args) {
+    // 将日志转换为字符串并存储
+    const logString = args.map(arg => 
+      typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+    ).join(' ');
+    
+    this.logs.push({
+      timestamp: new Date().toISOString(),
+      message: logString
+    });
+    
+    if (this.enabled) {
+      console.log(...args);
+    }
+  },
+  clearLogs: function() {
+    this.logs = [];
+  },
+  downloadLogs: function() {
+    const logText = this.logs.map(log => 
+      `[${log.timestamp}] ${log.message}`
+    ).join('\n');
+    
+    const blob = new Blob([logText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'training-logs.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+};
+
+// 添加调试开关按钮和下载日志按钮
+const toggleDebugBtn = document.createElement('button');
+toggleDebugBtn.textContent = '开启调试日志';
+toggleDebugBtn.onclick = () => {
+  DEBUG_MODE.enabled = !DEBUG_MODE.enabled;
+  toggleDebugBtn.textContent = DEBUG_MODE.enabled ? '关闭调试日志' : '开启调试日志';
+};
+
+const downloadLogsBtn = document.createElement('button');
+downloadLogsBtn.textContent = '下载训练日志';
+downloadLogsBtn.onclick = () => {
+  DEBUG_MODE.downloadLogs();
+};
+
+// 将按钮添加到 startTrainBtn 的父元素中
+startTrainBtn.parentElement.insertBefore(toggleDebugBtn, startTrainBtn.nextSibling);
+startTrainBtn.parentElement.insertBefore(downloadLogsBtn, toggleDebugBtn.nextSibling);
+
+// 设置为使用 WebGL 后端以启用GPU加速
+tf.setBackend('webgl');
+DEBUG_MODE.log('当前使用的后端:', tf.getBackend());
 
 // 训练数据
 let trainingData = {
@@ -86,6 +143,25 @@ trainingDataInput.addEventListener('change', async (e) => {
     // 读取标注文件
     const annotations = await loadAnnotations(annotationFile);
     console.log('加载到标注数据:', annotations);
+    
+    // 验证标注数据格式
+    if (!annotations.images || !Array.isArray(annotations.images)) {
+      console.error('标注数据格式错误：缺少images数组');
+      alert('标注数据格式错误');
+      return;
+    }
+
+    // 检查标注数据的值范围
+    annotations.images.forEach((img, index) => {
+      DEBUG_MODE.log(`检查第${index + 1}个标注数据:`, {
+        文件名: img.file_name,
+        标注框: img.annotations,
+        x范围: img.annotations.x >= 0 && img.annotations.x <= 1 ? '正常' : '异常',
+        y范围: img.annotations.y >= 0 && img.annotations.y <= 1 ? '正常' : '异常',
+        宽度范围: img.annotations.width >= 0 && img.annotations.width <= 1 ? '正常' : '异常',
+        高度范围: img.annotations.height >= 0 && img.annotations.height <= 1 ? '正常' : '异常'
+      });
+    });
 
     // 过滤出图片文件
     const imageFiles = files.filter(file => 
@@ -97,7 +173,14 @@ trainingDataInput.addEventListener('change', async (e) => {
       return;
     }
 
-    console.log(`找到 ${imageFiles.length} 个图片文件`);
+    DEBUG_MODE.log(`找到 ${imageFiles.length} 个图片文件:`, 
+      imageFiles.map(f => ({
+        文件名: f.name,
+        大小: (f.size / 1024).toFixed(2) + 'KB',
+        类型: f.type
+      }))
+    );
+
     datasetCount.textContent = '正在加载数据集...';
     startTrainBtn.disabled = true;
 
@@ -122,19 +205,43 @@ trainingDataInput.addEventListener('change', async (e) => {
 
           // 处理图片
           const tensor = await preprocessImage(file);
+          
+          // 验证图片张量
+          DEBUG_MODE.log(`图片 ${file.name} 预处理结果:`, {
+            张量形状: tensor.shape,
+            数值范围: {
+              最小值: tensor.min().dataSync()[0],
+              最大值: tensor.max().dataSync()[0]
+            }
+          });
+
           trainingData.images.push(tensor);
+          
           // 使用标注数据中的坐标
-          trainingData.labels.push([
+          const label = [
             annotation.annotations.x,
             annotation.annotations.y,
             annotation.annotations.width,
             annotation.annotations.height
-          ]);
+          ];
+          
+          // 验证标签值
+          DEBUG_MODE.log(`图片 ${file.name} 的标签值:`, {
+            rawValue: label,
+            x: label[0],
+            y: label[1],
+            width: label[2],
+            height: label[3],
+            isInRange: label.every(v => v >= 0 && v <= 1)
+          });
+          
+          trainingData.labels.push(label);
           
           // 更新进度
           datasetCount.textContent = `已加载 ${trainingData.images.length} 个样本，共 ${imageFiles.length} 个`;
         } catch (err) {
-          console.warn(`处理文件 ${file.name} 时出错:`, err);
+          DEBUG_MODE.log(`处理文件 ${file.name} 时出错:`, err);
+          console.error(`处理文件 ${file.name} 时出错`);
         }
       }
       
@@ -142,20 +249,38 @@ trainingDataInput.addEventListener('change', async (e) => {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    // 更新界面
-    if (trainingData.images.length > 0) {
-      startTrainBtn.disabled = false;
-      console.log('数据集加载完成:', {
-        总样本数: trainingData.images.length,
-        图片尺寸: [224, 224, 3],
-        标签示例: trainingData.labels[0]
-      });
-    } else {
-      alert('没有成功加载任何训练数据，请确保图片文件名与标注数据匹配');
-    }
-
+    // 数据集统计信息
+    DEBUG_MODE.log('数据集统计信息:', {
+      totalSamples: trainingData.images.length,
+      imageSize: [224, 224, 3],
+      labelStats: {
+        x: {
+          min: Math.min(...trainingData.labels.map(l => l[0])),
+          max: Math.max(...trainingData.labels.map(l => l[0])),
+          avg: trainingData.labels.reduce((sum, l) => sum + l[0], 0) / trainingData.labels.length
+        },
+        y: {
+          min: Math.min(...trainingData.labels.map(l => l[1])),
+          max: Math.max(...trainingData.labels.map(l => l[1])),
+          avg: trainingData.labels.reduce((sum, l) => sum + l[1], 0) / trainingData.labels.length
+        },
+        width: {
+          min: Math.min(...trainingData.labels.map(l => l[2])),
+          max: Math.max(...trainingData.labels.map(l => l[2])),
+          avg: trainingData.labels.reduce((sum, l) => sum + l[2], 0) / trainingData.labels.length
+        },
+        height: {
+          min: Math.min(...trainingData.labels.map(l => l[3])),
+          max: Math.max(...trainingData.labels.map(l => l[3])),
+          avg: trainingData.labels.reduce((sum, l) => sum + l[3], 0) / trainingData.labels.length
+        }
+      }
+    });
+      
+    startTrainBtn.disabled = false;
   } catch (err) {
-    console.error('加载数据集时出错:', err);
+    DEBUG_MODE.log('加载数据集时出错:', err);
+    console.error('加载数据集时出错');
     alert('加载数据集时出错，请检查控制台获取详细信息');
   }
 });
@@ -239,53 +364,212 @@ async function preprocessImage(file) {
 function createModel() {
   const model = tf.sequential();
   
-  // 使用更简单的网络结构，适合 CPU 运算
+  // 特征提取部分 - 使用ResNet风格的结构
   model.add(tf.layers.conv2d({
     inputShape: [224, 224, 3],
-    filters: 8,
-    kernelSize: 5,
-    strides: 4,
+    filters: 32,  // 增加初始滤波器数量
+    kernelSize: 7,
+    strides: 2,
+    padding: 'same',
     activation: 'relu',
     kernelInitializer: 'heNormal'
   }));
+  model.add(tf.layers.batchNormalization());
+  model.add(tf.layers.maxPooling2d({poolSize: 2}));
   
-  model.add(tf.layers.maxPooling2d({poolSize: 4}));
+  // 第一个残差块
+  const conv1 = tf.layers.conv2d({
+    filters: 64,  // 增加滤波器数量
+    kernelSize: 3,
+    padding: 'same',
+    activation: 'relu',
+    kernelInitializer: 'heNormal'
+  });
+  model.add(conv1);
+  model.add(tf.layers.batchNormalization());
+  model.add(tf.layers.dropout({rate: 0.2}));  // 添加dropout
   
+  // 第二个残差块
+  model.add(tf.layers.conv2d({
+    filters: 128,  // 增加滤波器数量
+    kernelSize: 3,
+    padding: 'same',
+    activation: 'relu',
+    kernelInitializer: 'heNormal'
+  }));
+  model.add(tf.layers.batchNormalization());
+  model.add(tf.layers.maxPooling2d({poolSize: 2}));
+  model.add(tf.layers.dropout({rate: 0.2}));  // 添加dropout
+  
+  // 空间注意力模块
+  model.add(tf.layers.conv2d({
+    filters: 1,
+    kernelSize: 1,
+    padding: 'same',
+    activation: 'sigmoid',
+    kernelInitializer: 'heNormal'
+  }));
+  
+  // 展平层
   model.add(tf.layers.flatten());
-  model.add(tf.layers.dense({
-    units: 16,
-    activation: 'relu',
-    kernelInitializer: 'heNormal'
-  }));
-  model.add(tf.layers.dense({
-    units: 4,
-    kernelInitializer: 'heNormal'
-  }));
   
-  return model;
+  // 回归头部
+  model.add(tf.layers.dense({
+    units: 256,  // 增加神经元数量
+    activation: 'relu',
+    kernelInitializer: 'heNormal',
+    kernelRegularizer: tf.regularizers.l2({l2: 0.01})
+  }));
+  model.add(tf.layers.dropout({rate: 0.3}));
+  
+  model.add(tf.layers.dense({
+    units: 128,  // 添加一个中间层
+    activation: 'relu',
+    kernelInitializer: 'heNormal',
+    kernelRegularizer: tf.regularizers.l2({l2: 0.01})
+  }));
+  model.add(tf.layers.dropout({rate: 0.2}));
+  
+  // 分别预测位置和尺寸
+  const position = tf.layers.dense({
+    units: 2,
+    activation: 'sigmoid',
+    kernelInitializer: 'heNormal',
+    name: 'position'
+  });
+  
+  const size = tf.layers.dense({
+    units: 2,
+    activation: 'sigmoid',
+    kernelInitializer: 'heNormal',
+    name: 'size'
+  });
+  
+  // 合并位置和尺寸预测
+  const positionOutput = position.apply(model.outputs[0]);
+  const sizeOutput = size.apply(model.outputs[0]);
+  const outputs = tf.layers.concatenate().apply([positionOutput, sizeOutput]);
+  
+  // 创建新模型
+  const finalModel = tf.model({
+    inputs: model.inputs,
+    outputs: outputs
+  });
+
+  // 使用较小的学习率和学习率衰减
+  const learningRate = 0.0005;
+  const decay = 0.0001;
+  const optimizer = tf.train.adam(learningRate, undefined, undefined, decay);
+  
+  finalModel.compile({
+    optimizer: optimizer,
+    loss: customLoss,
+    metrics: ['mse']
+  });
+  
+  return finalModel;
+}
+
+// 自定义损失函数：结合MSE和IoU损失
+function customLoss(yTrue, yPred) {
+  return tf.tidy(() => {
+    const epsilon = 1e-7;
+    
+    // 预测值已经在0-1范围内（通过sigmoid激活函数），不需要额外转换
+    const clippedPred = tf.clipByValue(yPred, epsilon, 1 - epsilon);  // 防止数值不稳定
+
+    // 分别计算位置和尺寸的MSE
+    const [x1, y1, w1, h1] = tf.split(yTrue, 4, 1);
+    const [x2, y2, w2, h2] = tf.split(clippedPred, 4, 1);
+    
+    // 位置损失 - 使用Huber损失以减少异常值的影响
+    const positionLoss = tf.add(
+      huberLoss(x1, x2, 2.0),  // 降低x坐标的delta值
+      huberLoss(y1, y2, 2.0)   // 降低y坐标的delta值
+    );
+    
+    // 尺寸损失 - 使用相对误差和Huber损失的组合
+    const sizeLoss = tf.add(
+      huberLoss(w1, w2, 1.0),  // 直接比较宽度
+      huberLoss(h1, h2, 1.0)   // 直接比较高度
+    );
+    
+    // 计算IoU
+    const intersection = calculateIntersection(x1, y1, w1, h1, x2, y2, w2, h2);
+    const union = calculateUnion(x1, y1, w1, h1, x2, y2, w2, h2);
+    const iou = tf.div(intersection, tf.maximum(union, epsilon));
+    const iouLoss = tf.sub(1, tf.mean(iou));
+    
+    // 调整损失权重 - 增加IoU损失的权重
+    return tf.add(
+      tf.mul(tf.mean(positionLoss), 0.2),    // 进一步降低位置损失权重
+      tf.add(
+        tf.mul(tf.mean(sizeLoss), 0.2),      // 降低尺寸损失权重
+        tf.mul(iouLoss, 0.6)                 // 大幅增加IoU损失权重
+      )
+    );
+  });
+}
+
+// Huber损失函数
+function huberLoss(yTrue, yPred, delta) {
+  return tf.tidy(() => {
+    const error = tf.sub(yTrue, yPred);
+    const absError = tf.abs(error);
+    const quadratic = tf.minimum(absError, delta);
+    const linear = tf.sub(absError, quadratic);
+    return tf.add(
+      tf.mul(0.5, tf.square(quadratic)),
+      tf.mul(delta, linear)
+    );
+  });
+}
+
+// 辅助函数：计算交集
+function calculateIntersection(x1, y1, w1, h1, x2, y2, w2, h2) {
+  return tf.tidy(() => {
+    const box1_x2 = tf.add(x1, w1);
+    const box1_y2 = tf.add(y1, h1);
+    const box2_x2 = tf.add(x2, w2);
+    const box2_y2 = tf.add(y2, h2);
+    
+    const intersect_x1 = tf.maximum(x1, x2);
+    const intersect_y1 = tf.maximum(y1, y2);
+    const intersect_x2 = tf.minimum(box1_x2, box2_x2);
+    const intersect_y2 = tf.minimum(box1_y2, box2_y2);
+    
+    const intersect_w = tf.maximum(tf.sub(intersect_x2, intersect_x1), 0);
+    const intersect_h = tf.maximum(tf.sub(intersect_y2, intersect_y1), 0);
+    
+    return tf.mul(intersect_w, intersect_h);
+  });
+}
+
+// 辅助函数：计算并集
+function calculateUnion(x1, y1, w1, h1, x2, y2, w2, h2) {
+  return tf.tidy(() => {
+    const area1 = tf.mul(w1, h1);
+    const area2 = tf.mul(w2, h2);
+    const intersection = calculateIntersection(x1, y1, w1, h1, x2, y2, w2, h2);
+    return tf.sub(tf.add(area1, area2), intersection);
+  });
 }
 
 // 开始训练
 startTrainBtn.addEventListener('click', async () => {
+  DEBUG_MODE.clearLogs();  // 清空之前的日志
   if (!model) {
     model = createModel();
   }
-  
-  const optimizer = tf.train.adam(0.001);
-  model.compile({
-    optimizer: optimizer,
-    loss: 'meanSquaredError',
-    metrics: ['mse']  // 使用均方误差作为评估指标
-  });
   
   isTraining = true;
   startTrainBtn.disabled = true;
   stopTrainBtn.disabled = false;
   
   try {
-    // 使用更小的批次大小和更少的训练轮数
-    const trainBatchSize = 1; // 单个样本训练
-    const totalEpochs = 50; // 限制最大训练轮数
+    // 增加批次大小以提高训练效率
+    const trainBatchSize = 4;
+    const totalEpochs = 50;
     
     // 清空图表数据
     chart.data.labels = [];
@@ -306,6 +590,12 @@ startTrainBtn.addEventListener('click', async () => {
         const image = trainingData.images[i];
         const label = trainingData.labels[i];
         
+        // 打印训练数据
+        DEBUG_MODE.log(`\n训练样本 ${i + 1}/${totalImages}:`, {
+          图片尺寸: image.shape,
+          标签值: label
+        });
+        
         // 创建输入张量
         const xs = image;
         const ys = tf.tensor2d([label]);
@@ -317,15 +607,74 @@ startTrainBtn.addEventListener('click', async () => {
           
           // 计算准确率
           const prediction = model.predict(xs);
-          const predictedBox = prediction.dataSync();
+          const predictedBox = prediction.dataSync();  // 直接使用预测值，不需要额外归一化
           
+          // 打印预测结果
+          DEBUG_MODE.log('预测结果:', {
+            预测框: predictedBox,
+            实际框: label,
+            损失值: loss,
+            归一化后的预测框: Array.from(predictedBox).map(v => v.toFixed(4))
+          });
+          
+          // 计算IoU作为准确率指标
           const accuracy = await tf.tidy(() => {
-            // 计算预测值与真实值的欧氏距离
-            const diff = prediction.sub(ys);
-            const squaredDiff = diff.square();
-            const meanSquaredError = squaredDiff.mean().dataSync()[0];
-            // 将均方误差转换为准确率（误差越小，准确率越高）
-            return Math.max(0, 1 - meanSquaredError);
+            // 计算边界框的坐标
+            const [x1, y1, w1, h1] = tf.split(ys, 4, 1);
+            const [x2, y2, w2, h2] = tf.split(prediction, 4, 1);  // 直接使用prediction
+            
+            // 打印IoU计算的中间值
+            const box1 = {
+              x: x1.dataSync()[0],
+              y: y1.dataSync()[0],
+              w: w1.dataSync()[0],
+              h: h1.dataSync()[0]
+            };
+            const box2 = {
+              x: x2.dataSync()[0],
+              y: y2.dataSync()[0],
+              w: w2.dataSync()[0],
+              h: h2.dataSync()[0]
+            };
+            DEBUG_MODE.log('IoU计算的边界框:', {
+              实际框: box1,
+              预测框: box2
+            });
+            
+            const box1_x2 = tf.add(x1, w1);
+            const box1_y2 = tf.add(y1, h1);
+            const box2_x2 = tf.add(x2, w2);
+            const box2_y2 = tf.add(y2, h2);
+            
+            // 计算交集
+            const intersect_x1 = tf.maximum(x1, x2);
+            const intersect_y1 = tf.maximum(y1, y2);
+            const intersect_x2 = tf.minimum(box1_x2, box2_x2);
+            const intersect_y2 = tf.minimum(box1_y2, box2_y2);
+            
+            const intersect_w = tf.maximum(tf.sub(intersect_x2, intersect_x1), 0);
+            const intersect_h = tf.maximum(tf.sub(intersect_y2, intersect_y1), 0);
+            const intersection = tf.mul(intersect_w, intersect_h);
+            
+            // 计算各自的面积
+            const area1 = tf.mul(w1, h1);
+            const area2 = tf.mul(w2, h2);
+            
+            // 计算并集
+            const union = tf.sub(tf.add(area1, area2), intersection);
+            
+            // 计算IoU
+            const iou = tf.div(intersection, tf.maximum(union, 1e-7));
+            
+            // 打印IoU计算的结果
+            const iouValue = iou.dataSync()[0];
+            DEBUG_MODE.log('IoU计算结果:', {
+              交集面积: intersection.dataSync()[0],
+              并集面积: union.dataSync()[0],
+              IoU值: iouValue
+            });
+            
+            return iou.dataSync()[0];
           });
           
           totalLoss += loss;
@@ -340,10 +689,8 @@ startTrainBtn.addEventListener('click', async () => {
           // 清理预测张量
           prediction.dispose();
           
-          // 每处理完一个样本后暂停一下
-          await new Promise(resolve => setTimeout(resolve, 200));
+          await new Promise(resolve => setTimeout(resolve, 50));
         } finally {
-          // 清理内存
           ys.dispose();
         }
       }
@@ -352,26 +699,28 @@ startTrainBtn.addEventListener('click', async () => {
       const avgLoss = totalLoss / batchCount;
       const avgAccuracy = totalAccuracy / batchCount;
       
+      DEBUG_MODE.log(`\n轮次 ${epoch + 1} 统计:`, {
+        平均损失: avgLoss,
+        平均准确率: avgAccuracy,
+        样本数: batchCount
+      });
+      
       // 更新图表
       chart.data.labels.push(epoch + 1);
       chart.data.datasets[0].data.push(avgLoss);
       chart.data.datasets[1].data.push(avgAccuracy);
       chart.update();
       
-      // 如果用户点击了停止按钮，停止训练
       if (!isTraining) break;
       
-      // 每轮结束后暂停一下
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // 打印当前训练状态
-      console.log(`轮次 ${epoch + 1}/${totalEpochs} 完成，平均损失: ${avgLoss.toFixed(4)}，平均准确率: ${(avgAccuracy * 100).toFixed(2)}%`);
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
 
     exportModelBtn.disabled = false;
     alert('训练完成！');
   } catch (err) {
-    console.error('训练过程中出错:', err);
+    DEBUG_MODE.log('训练过程中出错:', err);
+    console.error('训练过程中出错');
     alert('训练过程中出错，请检查控制台获取详细信息');
   } finally {
     isTraining = false;
@@ -440,7 +789,8 @@ exportModelBtn.addEventListener('click', async () => {
     
     alert('模型导出成功！');
   } catch (error) {
-    console.error('导出模型失败:', error);
+    DEBUG_MODE.log('导出模型失败:', error);
+    console.error('导出模型失败');
     alert('导出模型失败，请查看控制台了解详情');
   }
 }); 
