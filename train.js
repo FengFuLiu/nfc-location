@@ -346,10 +346,11 @@ async function preprocessImage(file) {
         
         // 创建填充后的张量
         const tensor = tf.tidy(() => {
-          // 首先将图像转换为张量
+          // 首先将图像转换为张量，并直接归一化到[-1,1]范围
           const imageTensor = tf.browser.fromPixels(canvas)
             .toFloat()
-            .div(255.0);
+            .div(127.5)
+            .sub(1);  // 直接归一化到[-1,1]范围
           
           // 创建填充张量
           const paddedTensor = tf.zeros([224, 224, 3]);
@@ -390,206 +391,66 @@ async function preprocessImage(file) {
   });
 }
 
-// 创建模型
-function createModel() {
-  const model = tf.sequential();
+// 创建模型（使用 MobileNet 迁移学习）
+async function createModel() {
+  // 加载 MobileNet 作为基础模型（去掉顶层）
+  const mobilenet = await tf.loadLayersModel('https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_0.25_224/model.json');
   
-  // 特征提取部分 - 使用ResNet风格的结构
-  model.add(tf.layers.conv2d({
-    inputShape: [224, 224, 3],
-    filters: 32,  // 增加初始滤波器数量
-    kernelSize: 7,
-    strides: 2,
-    padding: 'same',
-    activation: 'relu',
-    kernelInitializer: 'heNormal'
-  }));
-  model.add(tf.layers.batchNormalization());
-  model.add(tf.layers.maxPooling2d({poolSize: 2}));
-  
-  // 第一个残差块
-  const conv1 = tf.layers.conv2d({
-    filters: 64,  // 增加滤波器数量
-    kernelSize: 3,
-    padding: 'same',
-    activation: 'relu',
-    kernelInitializer: 'heNormal'
-  });
-  model.add(conv1);
-  model.add(tf.layers.batchNormalization());
-  model.add(tf.layers.dropout({rate: 0.2}));  // 添加dropout
-  
-  // 第二个残差块
-  model.add(tf.layers.conv2d({
-    filters: 128,  // 增加滤波器数量
-    kernelSize: 3,
-    padding: 'same',
-    activation: 'relu',
-    kernelInitializer: 'heNormal'
-  }));
-  model.add(tf.layers.batchNormalization());
-  model.add(tf.layers.maxPooling2d({poolSize: 2}));
-  model.add(tf.layers.dropout({rate: 0.2}));  // 添加dropout
-  
-  // 空间注意力模块
-  model.add(tf.layers.conv2d({
-    filters: 1,
-    kernelSize: 1,
-    padding: 'same',
-    activation: 'sigmoid',
-    kernelInitializer: 'heNormal'
-  }));
-  
-  // 展平层
-  model.add(tf.layers.flatten());
-  
-  // 回归头部
-  model.add(tf.layers.dense({
-    units: 256,  // 增加神经元数量
-    activation: 'relu',
-    kernelInitializer: 'heNormal',
-    kernelRegularizer: tf.regularizers.l2({l2: 0.01})
-  }));
-  model.add(tf.layers.dropout({rate: 0.3}));
-  
-  model.add(tf.layers.dense({
-    units: 128,  // 添加一个中间层
-    activation: 'relu',
-    kernelInitializer: 'heNormal',
-    kernelRegularizer: tf.regularizers.l2({l2: 0.01})
-  }));
-  model.add(tf.layers.dropout({rate: 0.2}));
-  
-  // 分别预测位置和尺寸
-  const position = tf.layers.dense({
-    units: 2,
-    activation: 'sigmoid',
-    kernelInitializer: 'heNormal',
-    name: 'position'
-  });
-  
-  const size = tf.layers.dense({
-    units: 2,
-    activation: 'sigmoid',
-    kernelInitializer: 'heNormal',
-    name: 'size'
-  });
-  
-  // 合并位置和尺寸预测
-  const positionOutput = position.apply(model.outputs[0]);
-  const sizeOutput = size.apply(model.outputs[0]);
-  const outputs = tf.layers.concatenate().apply([positionOutput, sizeOutput]);
-  
-  // 创建新模型
-  const finalModel = tf.model({
-    inputs: model.inputs,
-    outputs: outputs
+  // 获取中间层输出
+  const layer = mobilenet.getLayer('conv_pw_13_relu');
+  const truncatedModel = tf.model({
+    inputs: mobilenet.inputs,
+    outputs: layer.output
   });
 
-  // 使用较小的学习率和学习率衰减
-  const learningRate = 0.0005;
-  const decay = 0.0001;
-  const optimizer = tf.train.adam(learningRate, undefined, undefined, decay);
+  // 冻结 MobileNet 的权重
+  truncatedModel.trainable = false;
+
+  // 创建输入层
+  const input = tf.input({shape: [224, 224, 3]});
   
-  finalModel.compile({
+  // 构建模型管道
+  let x = input;
+  // 使用MobileNet提取特征
+  x = truncatedModel.apply(x);
+  // 添加全局平均池化层
+  x = tf.layers.globalAveragePooling2d({
+    dataFormat: 'channelsLast'
+  }).apply(x);
+  // 添加全连接层
+  x = tf.layers.dense({ 
+    units: 256, 
+    activation: 'relu',
+    kernelRegularizer: tf.regularizers.l2({ l2: 0.001 }) 
+  }).apply(x);
+  x = tf.layers.dropout({ rate: 0.3 }).apply(x);
+  x = tf.layers.dense({ units: 128, activation: 'relu' }).apply(x);
+  const output = tf.layers.dense({ units: 4, activation: 'sigmoid' }).apply(x);
+
+  // 创建最终模型
+  const model = tf.model({
+    inputs: input,
+    outputs: output
+  });
+
+  // 使用较小的学习率
+  const optimizer = tf.train.adam(0.0001);
+  
+  // 使用 Huber 损失
+  model.compile({
     optimizer: optimizer,
-    loss: customLoss,
+    loss: tf.losses.huberLoss,
     metrics: ['mse']
   });
-  
-  return finalModel;
-}
 
-// 自定义损失函数：结合MSE和IoU损失
-function customLoss(yTrue, yPred) {
-  return tf.tidy(() => {
-    const epsilon = 1e-7;
-    
-    // 预测值已经在0-1范围内（通过sigmoid激活函数），不需要额外转换
-    const clippedPred = tf.clipByValue(yPred, epsilon, 1 - epsilon);  // 防止数值不稳定
-
-    // 分别计算位置和尺寸的MSE
-    const [x1, y1, w1, h1] = tf.split(yTrue, 4, 1);
-    const [x2, y2, w2, h2] = tf.split(clippedPred, 4, 1);
-    
-    // 位置损失 - 使用Huber损失以减少异常值的影响
-    const positionLoss = tf.add(
-      huberLoss(x1, x2, 2.0),  // 降低x坐标的delta值
-      huberLoss(y1, y2, 2.0)   // 降低y坐标的delta值
-    );
-    
-    // 尺寸损失 - 使用相对误差和Huber损失的组合
-    const sizeLoss = tf.add(
-      huberLoss(w1, w2, 1.0),  // 直接比较宽度
-      huberLoss(h1, h2, 1.0)   // 直接比较高度
-    );
-    
-    // 计算IoU
-    const intersection = calculateIntersection(x1, y1, w1, h1, x2, y2, w2, h2);
-    const union = calculateUnion(x1, y1, w1, h1, x2, y2, w2, h2);
-    const iou = tf.div(intersection, tf.maximum(union, epsilon));
-    const iouLoss = tf.sub(1, tf.mean(iou));
-    
-    // 调整损失权重 - 增加IoU损失的权重
-    return tf.add(
-      tf.mul(tf.mean(positionLoss), 0.2),    // 进一步降低位置损失权重
-      tf.add(
-        tf.mul(tf.mean(sizeLoss), 0.2),      // 降低尺寸损失权重
-        tf.mul(iouLoss, 0.6)                 // 大幅增加IoU损失权重
-      )
-    );
-  });
-}
-
-// Huber损失函数
-function huberLoss(yTrue, yPred, delta) {
-  return tf.tidy(() => {
-    const error = tf.sub(yTrue, yPred);
-    const absError = tf.abs(error);
-    const quadratic = tf.minimum(absError, delta);
-    const linear = tf.sub(absError, quadratic);
-    return tf.add(
-      tf.mul(0.5, tf.square(quadratic)),
-      tf.mul(delta, linear)
-    );
-  });
-}
-
-// 辅助函数：计算交集
-function calculateIntersection(x1, y1, w1, h1, x2, y2, w2, h2) {
-  return tf.tidy(() => {
-    const box1_x2 = tf.add(x1, w1);
-    const box1_y2 = tf.add(y1, h1);
-    const box2_x2 = tf.add(x2, w2);
-    const box2_y2 = tf.add(y2, h2);
-    
-    const intersect_x1 = tf.maximum(x1, x2);
-    const intersect_y1 = tf.maximum(y1, y2);
-    const intersect_x2 = tf.minimum(box1_x2, box2_x2);
-    const intersect_y2 = tf.minimum(box1_y2, box2_y2);
-    
-    const intersect_w = tf.maximum(tf.sub(intersect_x2, intersect_x1), 0);
-    const intersect_h = tf.maximum(tf.sub(intersect_y2, intersect_y1), 0);
-    
-    return tf.mul(intersect_w, intersect_h);
-  });
-}
-
-// 辅助函数：计算并集
-function calculateUnion(x1, y1, w1, h1, x2, y2, w2, h2) {
-  return tf.tidy(() => {
-    const area1 = tf.mul(w1, h1);
-    const area2 = tf.mul(w2, h2);
-    const intersection = calculateIntersection(x1, y1, w1, h1, x2, y2, w2, h2);
-    return tf.sub(tf.add(area1, area2), intersection);
-  });
+  return model;
 }
 
 // 开始训练
 startTrainBtn.addEventListener('click', async () => {
   DEBUG_MODE.clearLogs();  // 清空之前的日志
   if (!model) {
-    model = createModel();
+    model = await createModel();
   }
   
   isTraining = true;
