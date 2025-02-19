@@ -340,9 +340,45 @@ async function preprocessImage(file) {
         // 设置canvas尺寸为目标尺寸
         canvas.width = targetWidth;
         canvas.height = targetHeight;
-        
+
+        // 数据增强：随机变换
+        ctx.save();  // 保存当前状态
+
+        // 1. 随机水平翻转 (50%概率)
+        const doFlip = Math.random() > 0.5;
+        if (doFlip) {
+          ctx.translate(targetWidth, 0);
+          ctx.scale(-1, 1);
+          DEBUG_MODE.log('应用水平翻转');
+        }
+
+        // 2. 随机旋转 (±15度)
+        const rotation = (Math.random() * 30 - 15) * Math.PI / 180;
+        ctx.translate(targetWidth/2, targetHeight/2);
+        ctx.rotate(rotation);
+        ctx.translate(-targetWidth/2, -targetHeight/2);
+        DEBUG_MODE.log('应用旋转:', (rotation * 180 / Math.PI).toFixed(2) + '度');
+
+        // 3. 随机亮度调整 (±20%)
+        const brightness = 0.8 + Math.random() * 0.4;
+        ctx.filter = `brightness(${brightness})`;
+        DEBUG_MODE.log('应用亮度调整:', brightness.toFixed(2));
+
         // 绘制调整后的图片
         ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+        ctx.restore();  // 恢复到保存的状态
+
+        // 4. 添加随机噪声
+        const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
+        const noise = 15;  // 噪声强度
+        for (let i = 0; i < imageData.data.length; i += 4) {
+          const randomNoise = (Math.random() * 2 - 1) * noise;
+          imageData.data[i] = Math.min(255, Math.max(0, imageData.data[i] + randomNoise));     // R
+          imageData.data[i+1] = Math.min(255, Math.max(0, imageData.data[i+1] + randomNoise)); // G
+          imageData.data[i+2] = Math.min(255, Math.max(0, imageData.data[i+2] + randomNoise)); // B
+        }
+        ctx.putImageData(imageData, 0, 0);
+        DEBUG_MODE.log('应用随机噪声');
         
         // 创建填充后的张量
         const tensor = tf.tidy(() => {
@@ -380,6 +416,13 @@ async function preprocessImage(file) {
             return tf.tensor(updates.values, [1, 224, 224, 3]);
           });
         });
+
+        // 记录数据增强的结果
+        DEBUG_MODE.log('数据增强后的张量信息:', {
+          shape: tensor.shape,
+          min: tensor.min().dataSync()[0],
+          max: tensor.max().dataSync()[0]
+        });
         
         resolve(tensor);
       } catch (err) {
@@ -391,55 +434,121 @@ async function preprocessImage(file) {
   });
 }
 
+// 添加复合损失函数（Huber + IoU）
+function weightedHuberIoULoss(weights) {
+  return (yTrue, yPred) => tf.tidy(() => {
+    // 打印输入张量的值和形状
+    DEBUG_MODE.log('损失函数输入:', {
+      yTrue: {
+        shape: yTrue.shape,
+        values: yTrue.dataSync(),
+      },
+      yPred: {
+        shape: yPred.shape,
+        values: yPred.dataSync(),
+      }
+    });
+
+    // Huber损失
+    const huberLoss = tf.losses.huberLoss(yTrue, yPred);
+    const huberValue = huberLoss.dataSync()[0];
+    DEBUG_MODE.log('Huber损失值:', huberValue);
+    
+    // IoU损失
+    const [x1, y1, w1, h1] = tf.split(yTrue, 4, 1);
+    const [x2, y2, w2, h2] = tf.split(yPred, 4, 1);
+    
+    // 打印分割后的坐标值
+    DEBUG_MODE.log('真实框坐标:', {
+      x: x1.dataSync()[0],
+      y: y1.dataSync()[0],
+      w: w1.dataSync()[0],
+      h: h1.dataSync()[0]
+    });
+    DEBUG_MODE.log('预测框坐标:', {
+      x: x2.dataSync()[0],
+      y: y2.dataSync()[0],
+      w: w2.dataSync()[0],
+      h: h2.dataSync()[0]
+    });
+    
+    const xMin = tf.maximum(x1.sub(w1.div(2)), x2.sub(w2.div(2)));
+    const yMin = tf.maximum(y1.sub(h1.div(2)), y2.sub(h2.div(2)));
+    const xMax = tf.minimum(x1.add(w1.div(2)), x2.add(w2.div(2)));
+    const yMax = tf.minimum(y1.add(h1.div(2)), y2.add(h2.div(2)));
+    
+    // 打印边界框计算结果
+    DEBUG_MODE.log('边界框计算:', {
+      xMin: xMin.dataSync()[0],
+      yMin: yMin.dataSync()[0],
+      xMax: xMax.dataSync()[0],
+      yMax: yMax.dataSync()[0]
+    });
+    
+    const intersection = tf.maximum(xMax.sub(xMin), 0).mul(tf.maximum(yMax.sub(yMin), 0));
+    const area1 = w1.mul(h1);
+    const area2 = w2.mul(h2);
+    const union = tf.sub(tf.add(area1, area2), intersection);
+    
+    // 打印面积计算结果
+    DEBUG_MODE.log('面积计算:', {
+      intersection: intersection.dataSync()[0],
+      area1: area1.dataSync()[0],
+      area2: area2.dataSync()[0],
+      union: union.dataSync()[0]
+    });
+    
+    const iou = intersection.div(tf.add(union, 1e-7));
+    const iouLoss = tf.sub(1, iou);
+    const iouValue = iouLoss.dataSync()[0];
+    DEBUG_MODE.log('IoU损失值:', iouValue);
+
+    const finalLoss = tf.add(
+      tf.mul(weights.box, huberLoss),
+      tf.mul(weights.iou, iouLoss)
+    );
+    
+    const finalLossValue = finalLoss.dataSync()[0];
+    DEBUG_MODE.log('最终损失值:', finalLossValue);
+
+    return finalLoss;
+  });
+}
+
 // 创建模型（使用 MobileNet 迁移学习）
 async function createModel() {
   // 加载 MobileNet 作为基础模型（去掉顶层）
   const mobilenet = await tf.loadLayersModel('https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_0.25_224/model.json');
-  
-  // 获取中间层输出
   const layer = mobilenet.getLayer('conv_pw_13_relu');
-  const truncatedModel = tf.model({
+  const baseModel = tf.model({
     inputs: mobilenet.inputs,
     outputs: layer.output
   });
+  baseModel.trainable = false;
 
-  // 冻结 MobileNet 的权重
-  truncatedModel.trainable = false;
-
-  // 创建输入层
-  const input = tf.input({shape: [224, 224, 3]});
-  
-  // 构建模型管道
-  let x = input;
-  // 使用MobileNet提取特征
-  x = truncatedModel.apply(x);
-  // 添加全局平均池化层
-  x = tf.layers.globalAveragePooling2d({
-    dataFormat: 'channelsLast'
-  }).apply(x);
-  // 添加全连接层
-  x = tf.layers.dense({ 
-    units: 256, 
-    activation: 'relu',
-    kernelRegularizer: tf.regularizers.l2({ l2: 0.001 }) 
-  }).apply(x);
-  x = tf.layers.dropout({ rate: 0.3 }).apply(x);
-  x = tf.layers.dense({ units: 128, activation: 'relu' }).apply(x);
-  const output = tf.layers.dense({ units: 4, activation: 'sigmoid' }).apply(x);
-
-  // 创建最终模型
-  const model = tf.model({
-    inputs: input,
-    outputs: output
+  const model = tf.sequential({
+    layers: [
+      tf.layers.inputLayer({ inputShape: [224, 224, 3] }),
+      baseModel,
+      // 添加空间金字塔池化
+      tf.layers.conv2d({ filters: 256, kernelSize: 3, padding: 'same', activation: 'relu' }),
+      tf.layers.maxPooling2d({ poolSize: 2, padding: 'same' }),
+      tf.layers.conv2d({ filters: 128, kernelSize: 3, padding: 'same', activation: 'relu' }),
+      // 使用全局上下文信息
+      tf.layers.globalAveragePooling2d({ dataFormat: 'channelsLast' }),
+      tf.layers.dense({ units: 64, activation: 'relu' }),
+      // 输出层使用线性激活（配合归一化处理）
+      tf.layers.dense({ units: 4, activation: 'linear' })
+    ]
   });
 
-  // 使用较小的学习率
-  const optimizer = tf.train.adam(0.0001);
+  // 使用复合损失函数
+  const lossWeights = { box: 1.0, iou: 0.7 };
+  const optimizer = tf.train.adam(0.001);
   
-  // 使用 Huber 损失
   model.compile({
     optimizer: optimizer,
-    loss: tf.losses.huberLoss,
+    loss: weightedHuberIoULoss(lossWeights),
     metrics: ['mse']
   });
 
@@ -449,8 +558,10 @@ async function createModel() {
 // 开始训练
 startTrainBtn.addEventListener('click', async () => {
   DEBUG_MODE.clearLogs();  // 清空之前的日志
+  DEBUG_MODE.enabled = true;  // 强制开启日志
   if (!model) {
     model = await createModel();
+    DEBUG_MODE.log('模型结构:', model.summary());
   }
   
   isTraining = true;
@@ -481,17 +592,28 @@ startTrainBtn.addEventListener('click', async () => {
         const image = trainingData.images[i];
         const label = trainingData.labels[i];
         
-        // 打印训练数据
-        DEBUG_MODE.log(`\n训练样本 ${i + 1}/${totalImages}:`, {
-          图片尺寸: image.shape,
-          标签值: label
-        });
+        DEBUG_MODE.log(`\n开始训练第 ${epoch + 1} 轮，第 ${i + 1} 个样本`);
+        DEBUG_MODE.log('输入图像形状:', image.shape);
+        DEBUG_MODE.log('标签值:', label);
         
         // 创建输入张量
         const xs = image;
         const ys = tf.tensor2d([label]);
         
         try {
+          // 训练前打印张量信息
+          DEBUG_MODE.log('训练输入:', {
+            xs: {
+              shape: xs.shape,
+              min: xs.min().dataSync()[0],
+              max: xs.max().dataSync()[0]
+            },
+            ys: {
+              shape: ys.shape,
+              values: ys.dataSync()
+            }
+          });
+          
           // 训练单个样本
           const result = await model.trainOnBatch(xs, ys);
           const loss = Array.isArray(result) ? result[0] : result;
@@ -581,6 +703,9 @@ startTrainBtn.addEventListener('click', async () => {
           prediction.dispose();
           
           await new Promise(resolve => setTimeout(resolve, 50));
+        } catch (err) {
+          DEBUG_MODE.log('训练样本时出错:', err);
+          throw err;
         } finally {
           ys.dispose();
         }
@@ -611,8 +736,8 @@ startTrainBtn.addEventListener('click', async () => {
     alert('训练完成！');
   } catch (err) {
     DEBUG_MODE.log('训练过程中出错:', err);
-    console.error('训练过程中出错');
-    alert('训练过程中出错，请检查控制台获取详细信息');
+    console.error('训练过程中出错:', err);
+    alert('训练过程中出错，请查看控制台获取详细信息');
   } finally {
     isTraining = false;
     startTrainBtn.disabled = false;
