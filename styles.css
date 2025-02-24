@@ -1557,3 +1557,190 @@ input[type="file"] {
     80% { opacity: 1; transform: translate(-50%, 0); }
     100% { opacity: 0; transform: translate(-50%, -10px); }
 }
+
+/* AI模式面板样式 */
+.ai-mode-panel {
+    margin-top: 20px;
+    padding: 20px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--background-light);
+}
+
+.ai-mode-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 10px;
+}
+
+.ai-tab-button {
+    padding: 8px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--background-main);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.ai-tab-button:hover {
+    background: var(--background-light);
+    border-color: var(--primary-color);
+}
+
+.ai-tab-button.active {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+.ai-panel {
+    padding: 15px;
+    background: var(--background-main);
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+}
+
+/* AI模式子面板样式 */
+.model-upload {
+    margin-bottom: 20px;
+}
+
+.model-upload label {
+    display: block;
+    margin-bottom: 10px;
+    color: var(--text-primary);
+}
+
+#modelStatus {
+    display: inline-block;
+    margin-left: 10px;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+/* 标注工具面板样式 */
+.annotation-guide {
+    margin-bottom: 20px;
+    padding: 15px;
+    background: var(--background-light);
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+}
+
+.annotation-guide h3 {
+    margin-bottom: 10px;
+    color: var(--text-primary);
+}
+
+.annotation-guide ol {
+    margin-left: 20px;
+    color: var(--text-secondary);
+}
+
+/* 训练面板样式 */
+.train-guide {
+    margin-bottom: 20px;
+}
+
+.guide-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.step {
+    position: relative;
+    padding: 20px;
+    background: var(--background-light);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+}
+
+.step-number {
+    position: absolute;
+    top: -15px;
+    left: -15px;
+    width: 30px;
+    height: 30px;
+    background: var(--primary-color);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+
+.step h4 {
+    margin-bottom: 10px;
+    color: var(--text-primary);
+}
+
+.step pre {
+    margin: 10px 0;
+    padding: 15px;
+    background: var(--background-main);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+/* 训练进度样式 */
+.train-progress {
+    margin-top: 20px;
+}
+
+.progress-container {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.progress-item {
+    padding: 15px;
+    background: var(--background-light);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    text-align: center;
+}
+
+.progress-item i {
+    font-size: 24px;
+    color: var(--primary-color);
+    margin-bottom: 5px;
+}
+
+.progress-item label {
+    display: block;
+    margin-bottom: 5px;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.progress-item span {
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.train-controls {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.train-controls button {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.train-controls button i {
+    font-size: 18px;
+}

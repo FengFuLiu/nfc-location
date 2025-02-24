@@ -27,8 +27,6 @@
         <div class="tab-buttons">
           <button class="tab-button" data-tab="mark">手动标记</button>
           <button class="tab-button" data-tab="detect">批量检测</button>
-          <button class="tab-button" data-tab="annotate">标注工具</button>
-          <button class="tab-button" data-tab="train">模型训练</button>
         </div>
       </div>
 
@@ -79,13 +77,6 @@
 
       <!-- 检测功能的内容 -->
       <div id="detectTab" class="tab-content">
-        <p>批量检测功能可以自动分析多个手机图片中的NFC位置：</p>
-        <ul style="margin: 10px 0 20px 20px; color: var(--text-secondary);">
-          <li>支持批量上传多个品牌和型号的手机图片</li>
-          <li>自动识别图片中已标记的NFC区域（红色框标记）</li>
-          <li>生成标准格式的JSON数据文件</li>
-        </ul>
-
         <div class="detection-mode">
           <h3>检测模式选择</h3>
           <div class="mode-options">
@@ -95,14 +86,189 @@
             </label>
             <label>
               <input type="radio" name="detectionMode" value="model">
-              AI模式（使用训练模型）
+              AI模式（使用深度学习模型）
             </label>
           </div>
-          <div class="model-upload" style="display: none;">
-            <label for="modelUpload">选择模型文件：</label>
-            <input type="file" id="modelUpload" accept=".zip" style="display: none;">
-            <button id="uploadModelBtn" class="custom-file-upload">上传模型文件</button>
-            <span id="modelStatus">未加载模型</span>
+
+          <!-- AI模式相关功能 -->
+          <div class="ai-mode-panel" style="display: none;">
+            <div class="ai-mode-tabs">
+              <button class="ai-tab-button active" data-tab="detect">检测</button>
+              <button class="ai-tab-button" data-tab="annotate">数据标注</button>
+              <button class="ai-tab-button" data-tab="train">模型训练</button>
+            </div>
+
+            <!-- AI检测面板 -->
+            <div class="ai-panel" id="ai-detect-panel">
+              <div class="model-upload">
+                <label for="modelUpload">选择模型文件：</label>
+                <input type="file" id="modelUpload" accept=".zip" style="display: none;">
+                <button id="uploadModelBtn" class="custom-file-upload">上传模型文件</button>
+                <span id="modelStatus">未加载模型</span>
+              </div>
+            </div>
+
+            <!-- 标注工具面板 -->
+            <div class="ai-panel" id="ai-annotate-panel" style="display: none;">
+              <div class="annotation-guide">
+                <h3>📝 图片标注说明</h3>
+                <ol>
+                  <li>选择需要标注的图片文件夹</li>
+                  <li>在图片上按住鼠标左键拖动来框选NFC区域</li>
+                  <li>调整框选区域直到准确包含NFC位置</li>
+                  <li>点击"生成数据集"按钮导出标注结果</li>
+                </ol>
+              </div>
+
+              <div class="annotation-area">
+                <div class="upload-section">
+                  <h3>选择图片</h3>
+                  <div class="upload-content">
+                    <div class="upload-area">
+                      <label class="upload-label" for="annotationInput">
+                        <i class="ri-image-add-line"></i>
+                        <span>选择图片文件夹</span>
+                      </label>
+                      <input type="file" id="annotationInput" webkitdirectory directory multiple accept="image/*">
+                    </div>
+                    <div class="file-info">
+                      <div class="info-item">
+                        <i class="ri-image-line"></i>
+                        <span>已选择：<span id="imageCount">0</span> 张图片</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="annotation-workspace">
+                  <div class="image-container">
+                    <img id="currentImage" style="display: none;">
+                    <canvas id="annotationCanvas"></canvas>
+                  </div>
+                  <div class="annotation-controls">
+                    <div class="image-navigation">
+                      <button id="prevImageBtn" disabled>
+                        <i class="ri-arrow-left-line"></i>
+                        上一张
+                      </button>
+                      <span id="imageProgress">0/0</span>
+                      <button id="nextImageBtn" disabled>
+                        下一张
+                        <i class="ri-arrow-right-line"></i>
+                      </button>
+                    </div>
+                    <div class="action-buttons">
+                      <button id="resetBoxBtn" disabled>
+                        <i class="ri-refresh-line"></i>
+                        重置框选
+                      </button>
+                      <button id="generateDatasetBtn" disabled>
+                        <i class="ri-file-zip-line"></i>
+                        生成数据集
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 模型训练面板 -->
+            <div class="ai-panel" id="ai-train-panel" style="display: none;">
+              <div class="train-guide">
+                <h3>🎯 训练数据集要求</h3>
+                <div class="guide-steps">
+                  <div class="step">
+                    <span class="step-number">1</span>
+                    <h4>数据集结构</h4>
+                    <p>请按以下结构准备数据集：</p>
+                    <pre>
+训练数据/
+  ├── annotations.json    # 标注文件
+  └── images/            # 图片文件夹
+      ├── phone1.jpg
+      ├── phone2.jpg
+      └── ...
+                    </pre>
+                  </div>
+                  <div class="step">
+                    <span class="step-number">2</span>
+                    <h4>标注文件格式</h4>
+                    <p>annotations.json 需要包含以下信息：</p>
+                    <pre>
+{
+  "images": [
+    {
+      "file_name": "phone1.jpg",
+      "annotations": {
+        "x": 0.1,      # 左上角x坐标 (0-1)
+        "y": 0.2,      # 左上角y坐标 (0-1)
+        "width": 0.3,  # 宽度 (0-1)
+        "height": 0.4  # 高度 (0-1)
+      }
+    },
+    ...
+  ]
+}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+
+              <div class="dataset-upload">
+                <h3>📂 数据集上传</h3>
+                <div class="upload-content">
+                  <div class="upload-area">
+                    <label class="upload-label" for="trainingDataInput">
+                      <i class="ri-folder-upload-line"></i>
+                      <span>选择训练数据文件夹</span>
+                    </label>
+                    <input type="file" id="trainingDataInput" webkitdirectory directory multiple>
+                  </div>
+                  <div class="dataset-info">
+                    <div class="info-item">
+                      <i class="ri-file-list-line"></i>
+                      <span>数据集状态：<span id="datasetCount">未选择数据集</span></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="train-progress">
+                <h3>📊 训练进度</h3>
+                <div class="progress-container">
+                  <div class="progress-item">
+                    <i class="ri-loop-left-line"></i>
+                    <label>当前轮次</label>
+                    <span id="currentEpoch">-</span>
+                  </div>
+                  <div class="progress-item">
+                    <i class="ri-error-warning-line"></i>
+                    <label>训练损失</label>
+                    <span id="trainLoss">-</span>
+                  </div>
+                  <div class="progress-item">
+                    <i class="ri-check-double-line"></i>
+                    <label>验证准确率</label>
+                    <span id="valAccuracy">-</span>
+                  </div>
+                </div>
+                <canvas id="trainingChart"></canvas>
+                <div class="train-controls">
+                  <button id="startTrainBtn" disabled>
+                    <i class="ri-play-circle-line"></i>
+                    开始训练
+                  </button>
+                  <button id="stopTrainBtn" disabled>
+                    <i class="ri-stop-circle-line"></i>
+                    停止训练
+                  </button>
+                  <button id="exportModelBtn" disabled>
+                    <i class="ri-download-cloud-line"></i>
+                    导出模型
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -325,7 +491,13 @@
           <li>选择检测模式：
             <ul>
               <li>传统模式：基于图像处理算法检测</li>
-              <li>AI模式：使用训练好的模型检测（需要先上传模型文件）</li>
+              <li>AI模式：使用深度学习模型检测
+                <ul>
+                  <li>检测：上传模型文件并执行检测</li>
+                  <li>数据标注：为模型训练准备标注数据</li>
+                  <li>模型训练：使用标注数据训练新模型</li>
+                </ul>
+              </li>
             </ul>
           </li>
           <li>准备图片：
@@ -509,6 +681,37 @@
             }
           });
         });
+      });
+    });
+
+    // AI模式面板切换
+    document.querySelectorAll('input[name="detectionMode"]').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        const aiModePanel = document.querySelector('.ai-mode-panel');
+        if (e.target.value === 'model') {
+          aiModePanel.style.display = 'block';
+        } else {
+          aiModePanel.style.display = 'none';
+        }
+      });
+    });
+
+    // AI子功能标签页切换
+    document.querySelectorAll('.ai-tab-button').forEach(button => {
+      button.addEventListener('click', (e) => {
+        // 移除所有active类
+        document.querySelectorAll('.ai-tab-button').forEach(btn => {
+          btn.classList.remove('active');
+        });
+        // 隐藏所有面板
+        document.querySelectorAll('.ai-panel').forEach(panel => {
+          panel.style.display = 'none';
+        });
+        
+        // 激活当前标签和面板
+        e.target.classList.add('active');
+        const panelId = `ai-${e.target.dataset.tab}-panel`;
+        document.getElementById(panelId).style.display = 'block';
       });
     });
   </script>
