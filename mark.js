@@ -1,5 +1,5 @@
 // 初始化变量
-let markingArea, phoneContainer, nfcMarker, generateBtn, copyMarkBtn, resetBtn, submitPRBtn;
+let markingArea, phoneContainer, nfcMarker, generateBtn, copyMarkBtn, resetBtn;
 let brandInput, modelInput, markResult;
 let currentMarker = null;
 let isDrawing = false;
@@ -24,7 +24,6 @@ function initialize() {
     generateBtn = document.getElementById('generateBtn');
     copyMarkBtn = document.getElementById('copyMarkBtn');
     resetBtn = document.getElementById('resetBtn');
-    submitPRBtn = document.getElementById('submitPRBtn');
     brandInput = document.getElementById('brand');
     modelInput = document.getElementById('model');
     markResult = document.getElementById('markResult');
@@ -72,7 +71,6 @@ function initialize() {
     if (generateBtn) generateBtn.addEventListener('click', generateResult);
     if (copyMarkBtn) copyMarkBtn.addEventListener('click', copyResult);
     if (resetBtn) resetBtn.addEventListener('click', resetAll);
-    if (submitPRBtn) submitPRBtn.addEventListener('click', submitPR);
 
     // 添加物理尺寸输入事件
     if (physicalHeight && physicalWidth) {
@@ -200,7 +198,6 @@ function resetMarker() {
     currentMarker = null;
     generateBtn.disabled = true;
     copyMarkBtn.disabled = true;
-    submitPRBtn.disabled = true;
     markResult.textContent = '暂无结果';
 }
 
@@ -226,7 +223,7 @@ function generateResult() {
     const pHeight = parseFloat(physicalHeight.value);
 
     // 计算设备比例
-    const ratio = parseFloat((pHeight / pWidth).toFixed(2));
+    const ratio = parseFloat((pHeight / pWidth).toFixed(4));
 
     // 计算NFC位置的相对比例
     const result = {
@@ -236,46 +233,17 @@ function generateResult() {
             ratio: ratio
         },
         nfcLocation: {
-            // 转换为相对比例
-            top: parseFloat((currentMarker.top / containerRect.height).toFixed(2)),
-            left: parseFloat((currentMarker.left / containerRect.width).toFixed(2)),
-            width: parseFloat((currentMarker.width / containerRect.width).toFixed(2)),
-            height: parseFloat((currentMarker.height / containerRect.height).toFixed(2))
+            // 转换为相对比例，保留4位小数
+            top: parseFloat((currentMarker.top / containerRect.height).toFixed(4)),
+            left: parseFloat((currentMarker.left / containerRect.width).toFixed(4)),
+            width: parseFloat((currentMarker.width / containerRect.width).toFixed(4)),
+            height: parseFloat((currentMarker.height / containerRect.height).toFixed(4))
         }
     };
 
     markResult.textContent = JSON.stringify(result, null, 2);
     copyMarkBtn.disabled = false;
-    submitPRBtn.disabled = false;
     window.currentResult = result;
-}
-
-/**
- * 提交PR
- */
-async function submitPR() {
-    if (!window.currentResult) {
-        alert('请先生成JSON结果');
-        return;
-    }
-
-    const brand = window.currentResult.device.brand;
-    const model = window.currentResult.device.model;
-    const content = JSON.stringify(window.currentResult, null, 2);
-    
-    try {
-        const branchName = `${brand.toLowerCase()}-${model.toLowerCase()}`;
-        const fileName = `${model}.json`;
-        
-        // 创建JSON文件，添加delete=true参数以自动删除分支
-        const jsonUrl = `${GITHUB_REPO_URL}/new/main?filename=data/${brand}/${fileName}&value=${encodeURIComponent(content)}&message=Add ${encodeURIComponent(`${brand} ${model}`)}&description=${encodeURIComponent(`Add NFC location data for ${brand} ${model}`)}&branch=${branchName}&delete=true`;
-        
-        window.open(jsonUrl, '_blank');
-        showSuccessMessage('请在GitHub页面确认并提交PR');
-    } catch (err) {
-        console.error('创建PR失败:', err);
-        alert('创建PR失败，请稍后重试');
-    }
 }
 
 /**
@@ -315,8 +283,6 @@ function resetAll() {
     const previewHeight = previewWidth * ratio;
     phoneContainer.style.width = `${previewWidth}px`;
     phoneContainer.style.height = `${previewHeight}px`;
-    
-    submitPRBtn.removeEventListener('click', submitPR);
 }
 
 // 添加提示信息显示函数
