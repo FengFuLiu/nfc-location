@@ -223,18 +223,6 @@ button:disabled {
   border-radius: 4px;
 }
 
-.copy-success {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  background: var(--success-color);
-  color: white;
-  padding: 10px 20px;
-  border-radius: 4px;
-  animation: fadeInOut 2s ease-in-out;
-  z-index: 1000;
-}
-
 .summary {
   margin-top: 20px;
   padding: 20px;
@@ -1483,27 +1471,6 @@ input[type="file"] {
   border-radius: 6px;
 }
 
-.copy-success {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  background: var(--success-color);
-  color: white;
-  padding: 12px 24px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-  animation: fadeInOut 2s ease-in-out;
-  z-index: 1000;
-}
-
-@keyframes fadeInOut {
-  0% { opacity: 0; transform: translateY(20px); }
-  20% { opacity: 1; transform: translateY(0); }
-  80% { opacity: 1; transform: translateY(0); }
-  100% { opacity: 0; transform: translateY(-20px); }
-}
-
-
 .workspace-wrapper {
   display: flex;
   gap: 20px;
@@ -1565,4 +1532,28 @@ input[type="file"] {
   word-wrap: break-word;
   flex: 1;
   overflow-y: auto;
+}
+
+/* 复制成功提示 */
+.copy-success {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(40, 167, 69, 0.9);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 3px;
+    font-size: 13px;
+    z-index: 1000;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    animation: fadeInOut 2s ease-in-out;
+    white-space: nowrap;
+}
+
+@keyframes fadeInOut {
+    0% { opacity: 0; transform: translate(-50%, -10px); }
+    20% { opacity: 1; transform: translate(-50%, 0); }
+    80% { opacity: 1; transform: translate(-50%, 0); }
+    100% { opacity: 0; transform: translate(-50%, -10px); }
 }

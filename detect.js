@@ -129,18 +129,20 @@ async function processFile(file) {
                                 imageData: event.target.result
                             });
                         } else {
+                            // 计算设备比例和相对位置
+                            const deviceRatio = parseFloat((result.nfcLocation.deviceHeight / result.nfcLocation.deviceWidth).toFixed(4));
                             const resultObject = {
                                 device: {
                                     brand: brand.toUpperCase(),
                                     model: model.toUpperCase(),
-                                    width: result.nfcLocation.deviceWidth,
-                                    height: result.nfcLocation.deviceHeight
+                                    ratio: deviceRatio
                                 },
                                 nfcLocation: {
-                                    top: result.nfcLocation.top,
-                                    left: result.nfcLocation.left,
-                                    width: result.nfcLocation.width,
-                                    height: result.nfcLocation.height
+                                    // 计算比例值，保留4位小数
+                                    top: parseFloat((result.nfcLocation.top / result.nfcLocation.deviceHeight).toFixed(4)),
+                                    left: parseFloat((result.nfcLocation.left / result.nfcLocation.deviceWidth).toFixed(4)),
+                                    width: parseFloat((result.nfcLocation.width / result.nfcLocation.deviceWidth).toFixed(4)),
+                                    height: parseFloat((result.nfcLocation.height / result.nfcLocation.deviceHeight).toFixed(4))
                                 }
                             };
                             allResults.push(resultObject);
@@ -574,19 +576,41 @@ function processTraditionalMode(img) {
     const nfcResult = detectRedRectangle(deviceImageData, deviceBounds.width, deviceBounds.height);
     
     if (nfcResult && nfcResult.nfcLocation) {
-        // 调整NFC区域坐标，使其相对于设备边界
-        nfcResult.nfcLocation.left += deviceBounds.x;
-        nfcResult.nfcLocation.top += deviceBounds.y;
-        nfcResult.nfcLocation.deviceWidth = deviceBounds.width;
-        nfcResult.nfcLocation.deviceHeight = deviceBounds.height;
+        // 保持原始坐标用于返回结果
+        const originalLeft = nfcResult.nfcLocation.left;
+        const originalTop = nfcResult.nfcLocation.top;
+
+        // 在原图上标记设备边界（使用蓝色）
+        ctx.strokeStyle = '#0066FF';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(deviceBounds.x, deviceBounds.y, deviceBounds.width, deviceBounds.height);
+
+        // 在设备边界内绘制NFC区域（使用黄色）
+        ctx.strokeStyle = '#FFD700';
+        const displayLeft = deviceBounds.x + originalLeft;
+        const displayTop = deviceBounds.y + originalTop;
+        
+        ctx.strokeRect(
+            displayLeft,
+            displayTop,
+            nfcResult.nfcLocation.width,
+            nfcResult.nfcLocation.height
+        );
+
+        // 返回原始坐标（不变）
+        return {
+            nfcLocation: {
+                left: originalLeft,
+                top: originalTop,
+                width: nfcResult.nfcLocation.width,
+                height: nfcResult.nfcLocation.height,
+                deviceWidth: deviceBounds.width,
+                deviceHeight: deviceBounds.height
+            }
+        };
     }
 
-    // 在原图上标记设备边界
-    ctx.strokeStyle = '#00FF00';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(deviceBounds.x, deviceBounds.y, deviceBounds.width, deviceBounds.height);
-
-    return nfcResult;
+    return null;
 }
 
 function detectRedRectangle(deviceImageData, deviceWidth, deviceHeight) {
@@ -757,15 +781,15 @@ function updateImageList() {
             if (imageData.result && imageData.result.nfcLocation) {
                 const nfc = imageData.result.nfcLocation;
                 
-                // 绘制设备边界（绿色）
-                ctx.strokeStyle = '#00FF00';
+                // 绘制设备边界（使用蓝色）
+                ctx.strokeStyle = '#0066FF';
                 ctx.lineWidth = 2;
-                // 计算设备边界的实际位置（去除留白）
                 const deviceBounds = detectDeviceBounds(
                     ctx.getImageData(0, 0, targetWidth, targetHeight),
                     targetWidth,
                     targetHeight
                 );
+                
                 ctx.strokeRect(
                     deviceBounds.x,
                     deviceBounds.y,
@@ -779,16 +803,21 @@ function updateImageList() {
                 const scaledWidth = Math.round(nfc.width * scale);
                 const scaledHeight = Math.round(nfc.height * scale);
                 
-                // 绘制NFC区域（蓝色）
-                ctx.strokeStyle = '#0000FF';
+                // 绘制NFC区域（使用黄色）
+                ctx.strokeStyle = '#FFD700';
                 ctx.lineWidth = 2;
-                ctx.strokeRect(scaledLeft, scaledTop, scaledWidth, scaledHeight);
-                
-                // 添加图例说明
+                ctx.strokeRect(
+                    deviceBounds.x + scaledLeft,
+                    deviceBounds.y + scaledTop,
+                    scaledWidth,
+                    scaledHeight
+                );
+
+                // 添加图例说明（更新颜色）
                 ctx.font = '12px Arial';
-                ctx.fillStyle = '#00FF00';
+                ctx.fillStyle = '#0066FF';
                 ctx.fillText('设备边界', 5, 15);
-                ctx.fillStyle = '#0000FF';
+                ctx.fillStyle = '#FFD700';
                 ctx.fillText('NFC区域', 5, 30);
             }
         };
@@ -979,15 +1008,14 @@ function showPreview(reason, index) {
 
         // 如果有设备边界信息，绘制边界框
         if (img.data) {
-            // 检测设备实际边界
             const deviceBounds = detectDeviceBounds(
                 ctx.getImageData(0, 0, image.width, image.height),
                 image.width,
                 image.height
             );
 
-            // 绘制设备边界（绿色）
-            ctx.strokeStyle = '#00FF00';
+            // 绘制设备边界（使用蓝色）
+            ctx.strokeStyle = '#0066FF';
             ctx.lineWidth = 2;
             ctx.strokeRect(
                 deviceBounds.x,
@@ -996,8 +1024,8 @@ function showPreview(reason, index) {
                 deviceBounds.height
             );
 
-            // 绘制NFC区域（蓝色）
-            ctx.strokeStyle = '#0000FF';
+            // 绘制NFC区域（使用黄色）
+            ctx.strokeStyle = '#FFD700';
             ctx.lineWidth = 2;
             const nfcLeft = img.data.left || img.data.nfcLeft;
             const nfcTop = img.data.top || img.data.nfcTop;
@@ -1006,11 +1034,11 @@ function showPreview(reason, index) {
             
             ctx.strokeRect(nfcLeft, nfcTop, nfcWidth, nfcHeight);
 
-            // 添加图例说明
+            // 添加图例说明（更新颜色）
             ctx.font = '14px Arial';
-            ctx.fillStyle = '#00FF00';
+            ctx.fillStyle = '#0066FF';
             ctx.fillText('设备边界', 10, 20);
-            ctx.fillStyle = '#0000FF';
+            ctx.fillStyle = '#FFD700';
             ctx.fillText('NFC区域', 10, 40);
         }
     };

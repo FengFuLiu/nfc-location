@@ -1,27 +1,118 @@
-// DOM元素
-const phoneContainer = document.getElementById('phoneContainer');
-const markingArea = document.getElementById('markingArea');
-const nfcMarker = document.getElementById('nfcMarker');
-const brandInput = document.getElementById('brand');
-const modelInput = document.getElementById('model');
-const generateBtn = document.getElementById('generateBtn');
-const resetBtn = document.getElementById('resetBtn');
-const copyMarkBtn = document.getElementById('copyMarkBtn');
-const markResult = document.getElementById('markResult');
-const aspectRatioInput = document.getElementById('aspectRatio');
-const sizeDisplay = document.querySelector('.size-display');
-const submitPRBtn = document.getElementById('submitPRBtn');
-
-// 常量定义
-const DEFAULT_ASPECT_RATIO = '19.5';
-const PHONE_WIDTH = 430;
-const GITHUB_REPO_URL = 'https://github.com/FengFuLiu/nfc-location';
-
-// 状态变量
+// 初始化变量
+let markingArea, phoneContainer, nfcMarker, generateBtn, copyMarkBtn, resetBtn, submitPRBtn;
+let brandInput, modelInput, markResult;
+let currentMarker = null;
 let isDrawing = false;
 let startX = 0;
 let startY = 0;
-let currentMarker = null;
+
+// 默认值设置（iPhone 13）
+const DEFAULT_DEVICE = {
+    brand: 'APPLE',
+    model: 'IPHONE13',
+    width: 71.5,  // 毫米
+    height: 146.7 // 毫米
+};
+
+const GITHUB_REPO_URL = 'https://github.com/FengFuLiu/nfc-location';
+
+// 初始化函数
+function initialize() {
+    // 获取DOM元素
+    markingArea = document.getElementById('markingArea');
+    phoneContainer = document.querySelector('.phone-container');
+    generateBtn = document.getElementById('generateBtn');
+    copyMarkBtn = document.getElementById('copyMarkBtn');
+    resetBtn = document.getElementById('resetBtn');
+    submitPRBtn = document.getElementById('submitPRBtn');
+    brandInput = document.getElementById('brand');
+    modelInput = document.getElementById('model');
+    markResult = document.getElementById('markResult');
+
+    // 获取物理尺寸输入元素
+    const physicalHeight = document.getElementById('physicalHeight');
+    const physicalWidth = document.getElementById('physicalWidth');
+
+    // 设置默认值
+    if (brandInput && modelInput) {
+        brandInput.value = DEFAULT_DEVICE.brand;
+        modelInput.value = DEFAULT_DEVICE.model;
+    }
+    
+    if (physicalHeight && physicalWidth) {
+        physicalWidth.value = DEFAULT_DEVICE.width;
+        physicalHeight.value = DEFAULT_DEVICE.height;
+        
+        // 设置预览模型尺寸
+        if (phoneContainer) {
+            const ratio = DEFAULT_DEVICE.height / DEFAULT_DEVICE.width;
+            phoneContainer.style.aspectRatio = ratio;
+            const previewWidth = Math.min(300, DEFAULT_DEVICE.width * 3);
+            const previewHeight = previewWidth * ratio;
+            phoneContainer.style.width = `${previewWidth}px`;
+            phoneContainer.style.height = `${previewHeight}px`;
+        }
+    }
+
+    // 创建NFC标记框
+    nfcMarker = document.createElement('div');
+    nfcMarker.className = 'nfc-marker';
+    if (markingArea) {
+        markingArea.appendChild(nfcMarker);
+    }
+
+    if (!markingArea || !phoneContainer) return;
+
+    // 绑定事件监听器
+    markingArea.addEventListener('mousedown', startDrawing);
+    markingArea.addEventListener('mousemove', draw);
+    markingArea.addEventListener('mouseup', endDrawing);
+    markingArea.addEventListener('mouseleave', endDrawing);
+
+    if (generateBtn) generateBtn.addEventListener('click', generateResult);
+    if (copyMarkBtn) copyMarkBtn.addEventListener('click', copyResult);
+    if (resetBtn) resetBtn.addEventListener('click', resetAll);
+    if (submitPRBtn) submitPRBtn.addEventListener('click', submitPR);
+
+    // 添加物理尺寸输入事件
+    if (physicalHeight && physicalWidth) {
+        const updateFromPhysical = () => {
+            const height = Number(physicalHeight.value);
+            const width = Number(physicalWidth.value);
+            
+            if (height && width) {
+                // 更新预览模型
+                if (phoneContainer) {
+                    const ratio = height / width;
+                    phoneContainer.style.aspectRatio = ratio;
+                    const previewWidth = Math.min(300, width * 3); // 1mm = 3px
+                    const previewHeight = previewWidth * ratio;
+                    phoneContainer.style.width = `${previewWidth}px`;
+                    phoneContainer.style.height = `${previewHeight}px`;
+                }
+            }
+        };
+
+        // 实时更新预览
+        physicalHeight.addEventListener('input', updateFromPhysical);
+        physicalWidth.addEventListener('input', updateFromPhysical);
+    }
+
+    // 品牌和型号事件监听器
+    if (brandInput && modelInput) {
+        const updateButtonState = () => {
+            if (generateBtn) {
+                generateBtn.disabled = !(brandInput.value && modelInput.value && currentMarker);
+            }
+        };
+
+        brandInput.addEventListener('input', updateButtonState);
+        modelInput.addEventListener('input', updateButtonState);
+    }
+}
+
+// 等待DOM加载完成后初始化
+document.addEventListener('DOMContentLoaded', initialize);
 
 /**
  * 显示成功提示
@@ -34,15 +125,6 @@ function showSuccessMessage(message) {
     document.body.appendChild(copySuccess);
     setTimeout(() => copySuccess.remove(), 2000);
 }
-
-/**
- * 更新手机比例
- */
-aspectRatioInput.addEventListener('input', function() {
-    const ratio = this.value;
-    sizeDisplay.textContent = `当前比例：9:${ratio}`;
-    phoneContainer.style.aspectRatio = `9/${ratio}`;
-});
 
 /**
  * 开始绘制标记
@@ -90,7 +172,9 @@ function draw(e) {
         nfcMarker.style.height = height + 'px';
     }
 
-    generateBtn.disabled = false;
+    if (generateBtn) {
+        generateBtn.disabled = false;
+    }
 }
 
 /**
@@ -129,24 +213,34 @@ function generateResult() {
         return;
     }
 
+    const physicalHeight = document.getElementById('physicalHeight');
+    const physicalWidth = document.getElementById('physicalWidth');
+    
+    if (!physicalHeight || !physicalWidth || !physicalHeight.value || !physicalWidth.value) {
+        alert('请输入物理尺寸');
+        return;
+    }
+
     const containerRect = phoneContainer.getBoundingClientRect();
-    const phoneHeight = PHONE_WIDTH * (parseFloat(aspectRatioInput.value) / 9);
+    const pWidth = parseFloat(physicalWidth.value);
+    const pHeight = parseFloat(physicalHeight.value);
 
-    const scaleX = PHONE_WIDTH / containerRect.width;
-    const scaleY = phoneHeight / containerRect.height;
+    // 计算设备比例
+    const ratio = parseFloat((pHeight / pWidth).toFixed(2));
 
+    // 计算NFC位置的相对比例
     const result = {
         device: {
             brand: brandInput.value.toUpperCase(),
             model: modelInput.value.toUpperCase(),
-            width: Math.round(PHONE_WIDTH),
-            height: Math.round(phoneHeight)
+            ratio: ratio
         },
         nfcLocation: {
-            top: Math.round(currentMarker.top * scaleY),
-            left: Math.round(currentMarker.left * scaleX),
-            width: Math.round(currentMarker.width * scaleX),
-            height: Math.round(currentMarker.height * scaleY)
+            // 转换为相对比例
+            top: parseFloat((currentMarker.top / containerRect.height).toFixed(2)),
+            left: parseFloat((currentMarker.left / containerRect.width).toFixed(2)),
+            width: parseFloat((currentMarker.width / containerRect.width).toFixed(2)),
+            height: parseFloat((currentMarker.height / containerRect.height).toFixed(2))
         }
     };
 
@@ -204,26 +298,32 @@ function resetAll() {
     resetMarker();
     brandInput.value = '';
     modelInput.value = '';
-    aspectRatioInput.value = DEFAULT_ASPECT_RATIO;
-    sizeDisplay.textContent = `当前比例：9:${DEFAULT_ASPECT_RATIO}`;
-    phoneContainer.style.aspectRatio = `9/${DEFAULT_ASPECT_RATIO}`;
+    
+    // 重置为默认值
+    const physicalHeight = document.getElementById('physicalHeight');
+    const physicalWidth = document.getElementById('physicalWidth');
+    
+    if (physicalHeight && physicalWidth) {
+        physicalWidth.value = DEFAULT_DEVICE.width;
+        physicalHeight.value = DEFAULT_DEVICE.height;
+    }
+    
+    // 更新预览模型
+    const ratio = DEFAULT_DEVICE.height / DEFAULT_DEVICE.width;
+    phoneContainer.style.aspectRatio = ratio;
+    const previewWidth = Math.min(300, DEFAULT_DEVICE.width * 3);
+    const previewHeight = previewWidth * ratio;
+    phoneContainer.style.width = `${previewWidth}px`;
+    phoneContainer.style.height = `${previewHeight}px`;
+    
     submitPRBtn.removeEventListener('click', submitPR);
 }
 
-// 事件监听器
-markingArea.addEventListener('mousedown', startDrawing);
-markingArea.addEventListener('mousemove', draw);
-markingArea.addEventListener('mouseup', endDrawing);
-markingArea.addEventListener('mouseleave', endDrawing);
-
-generateBtn.addEventListener('click', generateResult);
-copyMarkBtn.addEventListener('click', copyResult);
-resetBtn.addEventListener('click', resetAll);
-submitPRBtn.addEventListener('click', submitPR);
-
-brandInput.addEventListener('input', () => {
-    generateBtn.disabled = !(brandInput.value && modelInput.value && currentMarker);
-});
-modelInput.addEventListener('input', () => {
-    generateBtn.disabled = !(brandInput.value && modelInput.value && currentMarker);
-}); 
+// 添加提示信息显示函数
+function showMessage(message) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message';
+    messageDiv.textContent = message;
+    document.body.appendChild(messageDiv);
+    setTimeout(() => messageDiv.remove(), 3000);
+} 

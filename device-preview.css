@@ -1,0 +1,256 @@
+.phone-container {
+    position: relative;
+    width: var(--phone-width, 300px);
+    height: var(--phone-height, 650px);
+    margin: 40px auto;
+    transition: all 0.3s ease;
+    border: 2px solid var(--border-color);
+    border-radius: 20px;
+    background: var(--background-light);
+    overflow: hidden;
+    transform-origin: center center;
+}
+
+/* 设备外观样式 */
+.device-frame {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: var(--device-corner-radius, 44px);
+    border: var(--device-bezel-width, 2px) solid var(--device-bezel-color, #1a1a1a);
+    overflow: hidden;
+    background: var(--device-bg-color, #000);
+}
+
+/* 刘海屏/打孔屏 */
+.device-notch {
+    position: absolute;
+    top: var(--notch-top, 0);
+    left: 50%;
+    transform: translateX(-50%);
+    width: var(--notch-width, 126px);
+    height: var(--notch-height, 32px);
+    background: var(--device-bezel-color, #1a1a1a);
+    border-radius: 0 0 12px 12px;
+}
+
+/* 打孔屏 */
+.device-punch-hole {
+    position: absolute;
+    top: var(--punch-hole-top, 12px);
+    left: var(--punch-hole-left, 50%);
+    transform: translateX(-50%);
+    width: var(--punch-hole-size, 12px);
+    height: var(--punch-hole-size, 12px);
+    background: var(--device-bezel-color, #1a1a1a);
+    border-radius: 50%;
+}
+
+/* 标记区域 */
+.marking-area {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    cursor: crosshair;
+    background: var(--background-main);
+}
+
+/* 网格背景 */
+.marking-grid {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: linear-gradient(rgba(128,128,128,.1) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(128,128,128,.1) 1px, transparent 1px);
+    background-size: var(--grid-size, 20px) var(--grid-size, 20px);
+    pointer-events: none;
+}
+
+/* NFC标记框 */
+.nfc-marker {
+    position: absolute;
+    background: rgba(255, 0, 0, 0.3);
+    border: 2px solid red;
+    pointer-events: none;
+    display: none;
+    z-index: 100;
+}
+
+/* 缩放控制 */
+.zoom-controls {
+    position: absolute;
+    right: -50px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.zoom-button {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: var(--primary-color);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+}
+
+.zoom-button:hover {
+    background: var(--primary-hover);
+}
+
+/* 设备选择器 */
+.device-selector {
+    margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.device-option {
+    padding: 8px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.device-option.active {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+/* 标记指示器 */
+.marking-indicator {
+    position: absolute;
+    background: rgba(255, 0, 0, 0.3);
+    border: 2px solid red;
+    pointer-events: none;
+    display: none;
+}
+
+.marking-indicator.active {
+    display: block;
+}
+
+.message {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(40, 167, 69, 0.9);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 3px;
+    font-size: 13px;
+    z-index: 1000;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    animation: fadeInOut 2s ease-in-out;
+    white-space: nowrap;
+}
+
+@keyframes fadeInOut {
+    0% { opacity: 0; transform: translate(-50%, -10px); }
+    20% { opacity: 1; transform: translate(-50%, 0); }
+    80% { opacity: 1; transform: translate(-50%, 0); }
+    100% { opacity: 0; transform: translate(-50%, -10px); }
+}
+
+.resolution-group {
+    margin-bottom: 20px;
+}
+
+.physical-size-input {
+    margin: 12px 0;
+}
+
+.physical-size-input label {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.size-inputs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.size-inputs input {
+    width: 80px;
+    padding: 6px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.size-inputs span {
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.ratio-display {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 4px;
+    padding-left: 4px;
+}
+
+.ratio-display .size-display {
+    font-size: 12px;
+    color: var(--text-secondary);
+    min-width: 120px;
+}
+
+.ratio-display input[type="range"] {
+    flex: 1;
+    height: 4px;
+    background: var(--border-color);
+    border-radius: 2px;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.ratio-display input[type="range"]:hover {
+    opacity: 1;
+}
+
+.ratio-display input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    background: var(--primary-color);
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.small-button {
+    padding: 4px 8px;
+    border: none;
+    border-radius: 4px;
+    background: var(--primary-color);
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.small-button:hover {
+    background: var(--primary-hover);
+} 
